@@ -4,78 +4,78 @@
 #include <time.h>
 #include <ctype.h>
 
-#define MAX_NAME_LENGTH 100  // 最大名称长度
-#define MAX_DEPARTMENTS 10    // 最大科室数量
-#define MAX_WARDS_PER_DEPT 10 // 每个科室最大病房数
-#define MAX_BEDS_PER_WARD 20  // 每个病房最大床位数
-#define SUCCESS 1             // 成功
-#define FAILURE 0             // 失败
-#define TRUE 1                // 真
-#define FALSE 0               // 假
+#define MAX_NAME_LENGTH 100
+#define MAX_DEPARTMENTS 10
+#define MAX_WARDS_PER_DEPT 10
+#define MAX_BEDS_PER_WARD 20
+#define SUCCESS 1
+#define FAILURE 0
+#define TRUE 1
+#define FALSE 0
 
 // 数据库文件名
-#define DB_DEPARTMENTS_FILE "departments_db.txt" // 科室数据库文件
-#define DB_WARDS_FILE "wards_db.txt"             // 病房数据库文件
-#define DB_BEDS_FILE "beds_db.txt"               // 床位数据库文件
-#define DB_PATIENTS_FILE "patients_db.txt"       // 患者数据库文件
-#define DB_ANALYSIS_FILE "ai_analysis_report.txt" // 人工智能分析报告文件
+#define DB_DEPARTMENTS_FILE "departments_db.txt"
+#define DB_WARDS_FILE "wards_db.txt"
+#define DB_BEDS_FILE "beds_db.txt"
+#define DB_PATIENTS_FILE "patients_db.txt"
+#define DB_ANALYSIS_FILE "ai_analysis_report.txt"
 
 typedef enum {
-    STATUS_AVAILABLE = 0, // 状态：可用
-    STATUS_OCCUPIED = 1   // 状态：已占用
+    STATUS_AVAILABLE = 0,
+    STATUS_OCCUPIED = 1
 } BedStatus;
 
 typedef enum {
-    REPORT_CONSOLE = 1, // 报告输出到控制台
-    REPORT_FILE = 2,    // 报告输出到文件
-    REPORT_BOTH = 3     // 报告输出到控制台和文件
+    REPORT_CONSOLE = 1,
+    REPORT_FILE = 2,
+    REPORT_BOTH = 3
 } ReportType;
 
 // 核心结构体
 typedef struct Bed {
-    int bedNumber;                      // 床位号
-    BedStatus status;                   // 床位状态
-    int patientId;                      // 患者ID
-    char patientName[MAX_NAME_LENGTH];  // 患者姓名
-    struct Bed* next;                   // 指向下一个床位的指针
+    int bedNumber;
+    BedStatus status;
+    int patientId;
+    char patientName[MAX_NAME_LENGTH];
+    struct Bed* next;
 } Bed;
 
 typedef struct Ward {
-    int wardNumber;                      // 病房号
-    char wardName[MAX_NAME_LENGTH];      // 病房名称
-    int totalBeds;                       // 总床位数
-    int occupiedBeds;                    // 已占用床位数
-    Bed* bedList;                        // 床位链表头指针
-    struct Ward* next;                   // 指向下一个病房的指针
+    int wardNumber;
+    char wardName[MAX_NAME_LENGTH];
+    int totalBeds;
+    int occupiedBeds;
+    Bed* bedList;
+    struct Ward* next;
 } Ward;
 
 typedef struct Department {
-    int departmentId;                    // 科室ID
-    char departmentName[MAX_NAME_LENGTH]; // 科室名称
-    int totalWards;                      // 总病房数
-    int totalBeds;                       // 总床位数
-    int totalPatients;                   // 总患者数
-    Ward* wardList;                      // 病房链表头指针
-    struct Department* next;             // 指向下一个科室的指针
+    int departmentId;
+    char departmentName[MAX_NAME_LENGTH];
+    int totalWards;
+    int totalBeds;
+    int totalPatients;
+    Ward* wardList;
+    struct Department* next;
 } Department;
 
 typedef struct HospitalStatistics {
-    int totalDepartments;                // 科室总数
-    int totalWards;                      // 病房总数
-    int totalBeds;                       // 床位总数
-    int totalPatients;                   // 患者总数
-    float overallOccupancyRate;          // 总体占用率
-    float departmentOccupancyRates[MAX_DEPARTMENTS]; // 各科室占用率
-    char departmentNames[MAX_DEPARTMENTS][MAX_NAME_LENGTH]; // 科室名称数组
-    int departmentCount;                 // 科室数量
+    int totalDepartments;
+    int totalWards;
+    int totalBeds;
+    int totalPatients;
+    float overallOccupancyRate;
+    float departmentOccupancyRates[MAX_DEPARTMENTS];
+    char departmentNames[MAX_DEPARTMENTS][MAX_NAME_LENGTH];
+    int departmentCount;
 } HospitalStatistics;
 
 typedef struct PatientInfo {
-    int patientId;                       // 患者ID
-    char patientName[MAX_NAME_LENGTH];   // 患者姓名
-    int departmentId;                    // 科室ID
-    int wardNumber;                      // 病房号
-    int bedNumber;                       // 床位号
+    int patientId;
+    char patientName[MAX_NAME_LENGTH];
+    int departmentId;
+    int wardNumber;
+    int bedNumber;
 } PatientInfo;
 
 // 函数声明
@@ -104,7 +104,7 @@ void displayDepartment(const Department* department);
 void freeDepartment(Department* department);
 
 HospitalStatistics collectStatistics(Department* hospital);
-void exportStatisticsToFile(const HospitalStatistics* stats);
+void exportStatisticsToFile(Department* hospital);
 void generateStatisticsReport(Department* hospital, ReportType type);
 
 void printDepartmentDetails(Department* hospital);
@@ -153,6 +153,8 @@ int saveAllDataToDB(Department* hospital);
 int loadAllDataFromDB(Department** hospital);
 int isDatabaseEmpty(void);
 void createBackup(void);
+int checkDatabaseIntegrity(void);
+void printDatabaseSummary(Department* hospital);
 
 // ==================== 辅助函数 ====================
 
@@ -249,6 +251,42 @@ int getValidatedIntInput(const char* prompt, int min, int max) {
     } while (!valid);
 
     return value;
+}
+
+// ==================== 数据库完整性检查 ====================
+int checkDatabaseIntegrity(void) {
+    FILE* file = fopen(DB_DEPARTMENTS_FILE, "r");
+    if (file == NULL) return 0;
+    
+    char line[100];
+    int count = 0;
+    while (fgets(line, sizeof(line), file)) {
+        if (strlen(line) > 5) count++;
+    }
+    fclose(file);
+    
+    return (count > 0);
+}
+
+void printDatabaseSummary(Department* hospital) {
+    if (hospital == NULL) {
+        printf("数据库为空\n");
+        return;
+    }
+    
+    int deptCount = 0, wardCount = 0, bedCount = 0, patientCount = 0;
+    Department* dept = hospital;
+    while (dept) {
+        deptCount++;
+        wardCount += dept->totalWards;
+        bedCount += dept->totalBeds;
+        patientCount += dept->totalPatients;
+        dept = dept->next;
+    }
+    
+    printf("\n当前数据库状态:\n");
+    printf("  科室: %d | 病房: %d | 床位: %d | 患者: %d\n", 
+           deptCount, wardCount, bedCount, patientCount);
 }
 
 // ==================== 实时数据库函数 ====================
@@ -516,6 +554,14 @@ int loadPatientsFromDB(Department* hospital) {
 }
 
 int loadAllDataFromDB(Department** hospital) {
+    // Always free and fully rebuild in-memory hospital from DB to avoid
+    // duplicated wards/beds across multiple loads/generations.
+    if (hospital == NULL) return FAILURE;
+
+    if (*hospital != NULL) {
+        freeHospitalSystem(hospital);
+    }
+
     if (loadDepartmentsFromDB(hospital) == FAILURE) {
         return FAILURE;
     }
@@ -524,9 +570,45 @@ int loadAllDataFromDB(Department** hospital) {
         return FAILURE;
     }
 
+    // loadWardsFromDB() currently appends wards via addWardToDepartment(), which
+    // also increments department totals. Since we will recompute totals at the end,
+    // reset totals and let addWardToDepartment() manage them once.
+    // (The earlier bug you saw happens when totals/lists are not reset before loading.)
+
+    // Ensure department totals start from 0 (wardList should be empty after createDepartment).
+    Department* dept = *hospital;
+    while (dept != NULL) {
+        dept->totalWards = 0;
+        dept->totalBeds = 0;
+        dept->totalPatients = 0;
+        // wardList is already NULL at createDepartment, but keep it explicit.
+        dept->wardList = NULL;
+        dept = dept->next;
+    }
+
     loadWardsFromDB(*hospital);
     loadBedsFromDB(*hospital);
     loadPatientsFromDB(*hospital);
+
+    // Finally recompute totals from the loaded ward/bed structures.
+    dept = *hospital;
+    while (dept != NULL) {
+        updateDepartmentStats(dept);
+
+        // recompute totalWards/totalBeds from wardList
+        int wCount = 0;
+        int bCount = 0;
+        Ward* w = dept->wardList;
+        while (w != NULL) {
+            wCount++;
+            bCount += w->totalBeds;
+            w = w->next;
+        }
+        dept->totalWards = wCount;
+        dept->totalBeds = bCount;
+
+        dept = dept->next;
+    }
 
     return SUCCESS;
 }
@@ -534,12 +616,13 @@ int loadAllDataFromDB(Department** hospital) {
 int isDatabaseEmpty(void) {
     FILE* file = fopen(DB_DEPARTMENTS_FILE, "r");
     if (file == NULL) return 1;
-
+    
+    // চেক করুন ফাইলে কোনো ডাটা আছে কিনা
     fseek(file, 0, SEEK_END);
     long size = ftell(file);
     fclose(file);
-
-    return (size == 0);
+    
+    return (size <= 10);  // যদি ফাইলের সাইজ খুব ছোট হয় তাহলে খালি
 }
 
 void createBackup(void) {
@@ -573,6 +656,7 @@ void createBackup(void) {
     }
 
     fclose(backup);
+    printSuccess("备份已创建");
 }
 
 // ==================== 床位函数 ====================
@@ -848,15 +932,22 @@ HospitalStatistics collectStatistics(Department* hospital) {
     return stats;
 }
 
-void exportStatisticsToFile(const HospitalStatistics* stats) {
+void exportStatisticsToFile(Department* hospital) {
+    if (hospital == NULL) {
+        printError("医院数据为空，无法生成报告");
+        return;
+    }
+    
     FILE* file = fopen("hospital_report.txt", "w");
     if (file == NULL) {
         printError("无法创建报告文件");
         return;
     }
-
+    
+    HospitalStatistics stats = collectStatistics(hospital);
+    
     fprintf(file, "============================================================\n");
-    fprintf(file, "医院统计报告\n");
+    fprintf(file, "医院统计报告（基于真实数据库数据）\n");
     fprintf(file, "============================================================\n\n");
 
     time_t t;
@@ -865,28 +956,57 @@ void exportStatisticsToFile(const HospitalStatistics* stats) {
 
     fprintf(file, "医院概览\n");
     fprintf(file, "------------------------------------------------------------\n");
-    fprintf(file, "科室总数:       %d\n", stats->totalDepartments);
-    fprintf(file, "病房总数:       %d\n", stats->totalWards);
-    fprintf(file, "床位总数:       %d\n", stats->totalBeds);
-    fprintf(file, "患者总数:       %d\n", stats->totalPatients);
-    fprintf(file, "总体占用率:     %.1f%%\n\n", stats->overallOccupancyRate);
+    fprintf(file, "科室总数:       %d\n", stats.totalDepartments);
+    fprintf(file, "病房总数:       %d\n", stats.totalWards);
+    fprintf(file, "床位总数:       %d\n", stats.totalBeds);
+    fprintf(file, "患者总数:       %d\n", stats.totalPatients);
+    fprintf(file, "总体占用率:     %.1f%%\n\n", stats.overallOccupancyRate);
 
     fprintf(file, "科室细分\n");
     fprintf(file, "------------------------------------------------------------\n");
-    for (int i = 0; i < stats->departmentCount; i++) {
+    for (int i = 0; i < stats.departmentCount; i++) {
         fprintf(file, "%s: %.1f%% 占用率\n",
-                stats->departmentNames[i], stats->departmentOccupancyRates[i]);
+                stats.departmentNames[i], stats.departmentOccupancyRates[i]);
     }
 
     fprintf(file, "\n占用率可视化 (每个 # = 5%%)\n");
     fprintf(file, "------------------------------------------------------------\n");
-    for (int i = 0; i < stats->departmentCount; i++) {
-        int bars = (int)(stats->departmentOccupancyRates[i] / 5.0f);
+    for (int i = 0; i < stats.departmentCount; i++) {
+        int bars = (int)(stats.departmentOccupancyRates[i] / 5.0f);
         if (bars > 20) bars = 20;
-        fprintf(file, "%-15s %4.0f%% |", stats->departmentNames[i], stats->departmentOccupancyRates[i]);
+        fprintf(file, "%-15s %4.0f%% |", stats.departmentNames[i], stats.departmentOccupancyRates[i]);
         for (int j = 0; j < bars; j++) fprintf(file, "#");
         for (int j = bars; j < 20; j++) fprintf(file, " ");
         fprintf(file, "|\n");
+    }
+    
+    fprintf(file, "\n当前住院患者列表\n");
+    fprintf(file, "------------------------------------------------------------\n");
+    
+    Department* dept = hospital;
+    int patientCount = 0;
+    while (dept != NULL) {
+        Ward* ward = dept->wardList;
+        while (ward != NULL) {
+            Bed* bed = ward->bedList;
+            while (bed != NULL) {
+                if (bed->status == STATUS_OCCUPIED) {
+                    patientCount++;
+                    fprintf(file, "%d. %s (ID:%d) - %s -> 病房%d, 床位%d\n",
+                           patientCount, bed->patientName, bed->patientId,
+                           dept->departmentName, ward->wardNumber, bed->bedNumber);
+                }
+                bed = bed->next;
+            }
+            ward = ward->next;
+        }
+        dept = dept->next;
+    }
+    
+    if (patientCount == 0) {
+        fprintf(file, "当前无住院患者\n");
+    } else {
+        fprintf(file, "\n患者总数: %d\n", patientCount);
     }
 
     fclose(file);
@@ -894,10 +1014,8 @@ void exportStatisticsToFile(const HospitalStatistics* stats) {
 }
 
 void generateStatisticsReport(Department* hospital, ReportType type) {
-    HospitalStatistics stats = collectStatistics(hospital);
-
     if (type == REPORT_FILE || type == REPORT_BOTH) {
-        exportStatisticsToFile(&stats);
+        exportStatisticsToFile(hospital);
     }
 }
 
@@ -1250,62 +1368,91 @@ Department* initializeHospital(void) {
     return hospital;
 }
 
-// ==================== 人工智能数据分析 - 所有数据来自数据库 ====================
+// ==================== 人工智能数据分析 - 基于真实数据库数据 ====================
 void performDataAnalysis(Department* hospital) {
     time_t now;
     time(&now);
-
+    
+    if (hospital == NULL) {
+        printError("医院数据为空！无法进行AI分析。");
+        return;
+    }
+    
     printf("\n============================================================\n");
     printf("       人工智能数据分析与预测 - 处理中\n");
     printf("============================================================\n");
-    printInfo("正在从数据库文件读取实时数据...");
-
-    // 从数据库（已在内存中）收集当前统计信息
-    HospitalStatistics stats = collectStatistics(hospital);
-
-    // 打开文件以写入人工智能分析报告
+    printInfo("正在从真实数据库数据生成分析报告...");
+    
+    int totalDepartments = 0;
+    int totalWards = 0;
+    int totalBeds = 0;
+    int totalPatients = 0;
+    
+    Department* dept = hospital;
+    while (dept != NULL) {
+        totalDepartments++;
+        totalWards += dept->totalWards;
+        totalBeds += dept->totalBeds;
+        totalPatients += dept->totalPatients;
+        dept = dept->next;
+    }
+    
+    float overallRate = (totalBeds > 0) ? ((float)totalPatients / totalBeds * 100) : 0;
+    
     FILE* file = fopen(DB_ANALYSIS_FILE, "w");
     if (file == NULL) {
         printError("无法创建人工智能分析报告文件");
         return;
     }
 
-    // 写入报告头
     fprintf(file, "================================================================================\n");
     fprintf(file, "                    人工智能辅助数据分析报告\n");
     fprintf(file, "================================================================================\n");
     fprintf(file, "报告生成时间: %s", ctime(&now));
-    fprintf(file, "数据源: 实时数据库文件\n");
+    fprintf(file, "数据源: 真实数据库文件 (departments_db.txt, wards_db.txt, beds_db.txt, patients_db.txt)\n");
     fprintf(file, "================================================================================\n\n");
 
-    // 第1节：当前医院状态（来自实际数据库）
-    fprintf(file, "第1节：当前医院状态（来自数据库）\n");
+    fprintf(file, "第1节：当前医院状态（基于真实数据库数据）\n");
     fprintf(file, "--------------------------------------------------------------------------------\n");
-    fprintf(file, "科室总数:       %d\n", stats.totalDepartments);
-    fprintf(file, "病房总数:       %d\n", stats.totalWards);
-    fprintf(file, "床位总数:       %d\n", stats.totalBeds);
-    fprintf(file, "患者总数:       %d\n", stats.totalPatients);
-    fprintf(file, "总体占用率:     %.1f%%\n\n", stats.overallOccupancyRate);
+    fprintf(file, "科室总数:       %d\n", totalDepartments);
+    fprintf(file, "病房总数:       %d\n", totalWards);
+    fprintf(file, "床位总数:       %d\n", totalBeds);
+    fprintf(file, "患者总数:       %d\n", totalPatients);
+    fprintf(file, "总体占用率:     %.1f%%\n\n", overallRate);
 
-    // 第2节：按科室分析（来自实际数据库）
-    fprintf(file, "第2节：按科室分析（基于实际数据）\n");
+    fprintf(file, "第2节：按科室分析（基于真实数据库数据）\n");
     fprintf(file, "--------------------------------------------------------------------------------\n");
     fprintf(file, "%-15s | %-10s | %-10s | %-12s | %-15s\n",
-            "科室", "患者数", "床位数", "占用率", "状态");
+            "科室名称", "患者数", "床位数", "占用率", "状态");
     fprintf(file, "-----------------+------------+------------+--------------+-----------------\n");
 
-    Department* dept = hospital;
+    dept = hospital;
     int criticalCount = 0;
     int warningCount = 0;
     float highestOccupancy = 0;
     char highestDept[50] = "";
     float lowestOccupancy = 100;
     char lowestDept[50] = "";
+    int deptDataCount = 0;
+    
+    typedef struct {
+        char name[50];
+        int patients;
+        int beds;
+        float rate;
+    } DeptData;
+    
+    DeptData deptData[MAX_DEPARTMENTS];
 
-    while (dept != NULL) {
+    while (dept != NULL && deptDataCount < MAX_DEPARTMENTS) {
         float rate = dept->totalBeds > 0 ? (float)dept->totalPatients / dept->totalBeds * 100 : 0;
-
-        // 跟踪统计
+        
+        strcpy(deptData[deptDataCount].name, dept->departmentName);
+        deptData[deptDataCount].patients = dept->totalPatients;
+        deptData[deptDataCount].beds = dept->totalBeds;
+        deptData[deptDataCount].rate = rate;
+        deptDataCount++;
+        
         if (rate > highestOccupancy) {
             highestOccupancy = rate;
             strcpy(highestDept, dept->departmentName);
@@ -1314,7 +1461,7 @@ void performDataAnalysis(Department* hospital) {
             lowestOccupancy = rate;
             strcpy(lowestDept, dept->departmentName);
         }
-
+        
         const char* status;
         if (rate > 75) {
             status = "危急";
@@ -1325,110 +1472,93 @@ void performDataAnalysis(Department* hospital) {
         } else {
             status = "正常";
         }
-
+        
         fprintf(file, "%-15s | %-10d | %-10d | %-11.1f%% | %-15s\n",
                 dept->departmentName, dept->totalPatients, dept->totalBeds, rate, status);
+        
         dept = dept->next;
     }
     fprintf(file, "\n");
 
-    // 第3节：床位利用率可视化（来自实际数据）
     fprintf(file, "第3节：床位利用率可视化（每个 # = 5%% 容量）\n");
     fprintf(file, "--------------------------------------------------------------------------------\n");
-    dept = hospital;
-    while (dept != NULL) {
-        float rate = dept->totalBeds > 0 ? (float)dept->totalPatients / dept->totalBeds * 100 : 0;
-        int bars = (int)(rate / 5);
+    
+    for (int i = 0; i < deptDataCount; i++) {
+        int bars = (int)(deptData[i].rate / 5);
         if (bars > 20) bars = 20;
-        fprintf(file, "%-15s [%3.0f%%] ", dept->departmentName, rate);
-        for (int i = 0; i < bars; i++) fprintf(file, "#");
-        for (int i = bars; i < 20; i++) fprintf(file, ".");
-        fprintf(file, " %d/%d 张床\n", dept->totalPatients, dept->totalBeds);
-        dept = dept->next;
+        fprintf(file, "%-15s [%3.0f%%] ", deptData[i].name, deptData[i].rate);
+        for (int j = 0; j < bars; j++) fprintf(file, "#");
+        for (int j = bars; j < 20; j++) fprintf(file, ".");
+        fprintf(file, " %d/%d 张床\n", deptData[i].patients, deptData[i].beds);
     }
     fprintf(file, "\n");
 
-    // 第4节：人工智能预测（根据实际数据库值计算）
-    fprintf(file, "第4节：人工智能预测引擎（基于实际占用数据）\n");
+    fprintf(file, "第4节：人工智能预测引擎（基于真实占用数据）\n");
     fprintf(file, "--------------------------------------------------------------------------------\n");
-    fprintf(file, "当前总体占用率: %.1f%%\n", stats.overallOccupancyRate);
+    fprintf(file, "当前总体占用率: %.1f%%\n", overallRate);
     fprintf(file, "处于危急水平的科室 (>75%%): %d\n", criticalCount);
     fprintf(file, "处于警告水平的科室 (50-75%%): %d\n", warningCount);
     fprintf(file, "占用率最高的科室: %s 为 %.1f%%\n", highestDept, highestOccupancy);
     fprintf(file, "占用率最低的科室: %s 为 %.1f%%\n\n", lowestDept, lowestOccupancy);
 
-    // 基于实际数据的预测
     fprintf(file, "未来30天预测:\n");
     fprintf(file, "----------------------------------------\n");
 
-    dept = hospital;
-    while (dept != NULL) {
-        float rate = dept->totalBeds > 0 ? (float)dept->totalPatients / dept->totalBeds * 100 : 0;
-
-        // 根据当前比率和历史模式计算预测增长
-        float predictedIncrease = 0;
+    for (int i = 0; i < deptDataCount; i++) {
+        float rate = deptData[i].rate;
+        float predictedIncrease = 5.0;
         int additionalBeds = 0;
-        char recommendation[200] = "";
-
-        if (strcmp(dept->departmentName, "心内科") == 0) {
+        char recommendation[200] = "密切监控";
+        
+        if (strcmp(deptData[i].name, "心内科") == 0) {
             predictedIncrease = 18.0;
-            additionalBeds = (int)((rate + predictedIncrease) * dept->totalBeds / 100) - dept->totalPatients;
+            additionalBeds = (int)((rate + predictedIncrease) * deptData[i].beds / 100) - deptData[i].patients;
             if (additionalBeds < 0) additionalBeds = 0;
             sprintf(recommendation, "为冬季心血管季节准备 %d 张额外床位", additionalBeds);
         }
-        else if (strcmp(dept->departmentName, "儿科") == 0) {
+        else if (strcmp(deptData[i].name, "儿科") == 0) {
             predictedIncrease = 12.0;
-            additionalBeds = (int)((rate + predictedIncrease) * dept->totalBeds / 100) - dept->totalPatients;
+            additionalBeds = (int)((rate + predictedIncrease) * deptData[i].beds / 100) - deptData[i].patients;
             if (additionalBeds < 0) additionalBeds = 0;
             sprintf(recommendation, "储备儿科药品，准备 %d 张额外床位", additionalBeds);
         }
-        else if (strcmp(dept->departmentName, "急诊科") == 0) {
+        else if (strcmp(deptData[i].name, "急诊科") == 0) {
             predictedIncrease = 8.0;
-            additionalBeds = (int)((rate + predictedIncrease) * dept->totalBeds / 100) - dept->totalPatients;
+            additionalBeds = (int)((rate + predictedIncrease) * deptData[i].beds / 100) - deptData[i].patients;
             if (additionalBeds < 0) additionalBeds = 0;
             sprintf(recommendation, "增加急诊人员，准备 %d 张观察床位", additionalBeds);
         }
-        else if (strcmp(dept->departmentName, "外科") == 0) {
+        else if (strcmp(deptData[i].name, "外科") == 0) {
             predictedIncrease = 3.0;
-            additionalBeds = (int)((rate + predictedIncrease) * dept->totalBeds / 100) - dept->totalPatients;
+            additionalBeds = (int)((rate + predictedIncrease) * deptData[i].beds / 100) - deptData[i].patients;
             if (additionalBeds < 0) additionalBeds = 0;
             sprintf(recommendation, "仔细安排择期手术");
         }
-        else if (strcmp(dept->departmentName, "骨科") == 0) {
+        else if (strcmp(deptData[i].name, "骨科") == 0) {
             predictedIncrease = -5.0;
             additionalBeds = 0;
             sprintf(recommendation, "预期减少，考虑资源重新分配");
         }
-        else {
-            predictedIncrease = 5.0;
-            additionalBeds = (int)((rate + predictedIncrease) * dept->totalBeds / 100) - dept->totalPatients;
-            if (additionalBeds < 0) additionalBeds = 0;
-            sprintf(recommendation, "密切监控");
-        }
-
-        fprintf(file, "\n%s:\n", dept->departmentName);
-        fprintf(file, "  当前: %.1f%% (%d/%d 张床)\n", rate, dept->totalPatients, dept->totalBeds);
+        
+        fprintf(file, "\n%s:\n", deptData[i].name);
+        fprintf(file, "  当前: %.1f%% (%d/%d 张床)\n", rate, deptData[i].patients, deptData[i].beds);
         fprintf(file, "  预测变化: %+.1f%%\n", predictedIncrease);
         fprintf(file, "  预期占用率: %.1f%%\n", rate + predictedIncrease);
         if (additionalBeds > 0) {
             fprintf(file, "  额外所需床位: %d\n", additionalBeds);
         }
         fprintf(file, "  建议: %s\n", recommendation);
-
-        dept = dept->next;
     }
     fprintf(file, "\n");
 
-    // 第5节：风险评估（根据实际数据计算）
     fprintf(file, "第5节：风险评估矩阵\n");
     fprintf(file, "--------------------------------------------------------------------------------\n");
 
-    dept = hospital;
-    while (dept != NULL) {
-        float rate = dept->totalBeds > 0 ? (float)dept->totalPatients / dept->totalBeds * 100 : 0;
+    for (int i = 0; i < deptDataCount; i++) {
+        float rate = deptData[i].rate;
         int riskLevel;
         char riskString[20];
-
+        
         if (rate > 85) {
             riskLevel = 4;
             strcpy(riskString, "危急");
@@ -1442,48 +1572,76 @@ void performDataAnalysis(Department* hospital) {
             riskLevel = 1;
             strcpy(riskString, "低");
         }
-
+        
         fprintf(file, "%-15s | 占用率: %3.0f%% | 风险等级: %s (%d/4)\n",
-                dept->departmentName, rate, riskString, riskLevel);
-        dept = dept->next;
+                deptData[i].name, rate, riskString, riskLevel);
     }
     fprintf(file, "\n");
 
-    // 第6节：建议行动项（基于实际数据）
     fprintf(file, "第6节：建议行动项\n");
     fprintf(file, "--------------------------------------------------------------------------------\n");
-
-    if (stats.overallOccupancyRate > 70) {
-        fprintf(file, "  [!] 全院警报：总体占用率为 %.1f%%\n", stats.overallOccupancyRate);
+    
+    if (overallRate > 70) {
+        fprintf(file, "  [!] 全院警报：总体占用率为 %.1f%%\n", overallRate);
         fprintf(file, "  [!] 立即启动紧急溢出协议\n");
+    } else if (overallRate > 50) {
+        fprintf(file, "  [i] 全院注意：总体占用率为 %.1f%%，请保持警惕\n", overallRate);
+    } else {
+        fprintf(file, "  [✓] 全院状态：总体占用率为 %.1f%%，资源充足\n", overallRate);
     }
-
+    
     if (criticalCount > 0) {
         fprintf(file, "  [!] %d 个科室处于危急容量\n", criticalCount);
         fprintf(file, "  [✓] 优先安排这些科室的稳定患者出院\n");
         fprintf(file, "  [✓] 考虑将非重症患者转移到占用率较低的科室\n");
     }
-
+    
     if (warningCount > 0) {
         fprintf(file, "  [i] %d 个科室处于警告水平\n", warningCount);
         fprintf(file, "  [✓] 为这些科室准备备用床位\n");
     }
-
+    
     fprintf(file, "  [✓] 最高优先级: %s 占用率为 %.1f%%\n", highestDept, highestOccupancy);
     fprintf(file, "  [✓] 可能进行资源重新分配的科室: %s (%.1f%%)\n", lowestDept, lowestOccupancy);
-    fprintf(file, "  [✓] 为高需求科室安排额外人员\n");
-    fprintf(file, "  [✓] 审查所有长期住院患者是否符合出院条件\n");
 
-    // 第7节：使用的数据库文件摘要
-    fprintf(file, "\n第7节：使用的数据库文件\n");
+    fprintf(file, "\n第7节：当前住院患者列表（基于真实数据库）\n");
+    fprintf(file, "--------------------------------------------------------------------------------\n");
+    
+    dept = hospital;
+    int patientCount = 0;
+    while (dept != NULL) {
+        Ward* ward = dept->wardList;
+        while (ward != NULL) {
+            Bed* bed = ward->bedList;
+            while (bed != NULL) {
+                if (bed->status == STATUS_OCCUPIED) {
+                    patientCount++;
+                    fprintf(file, "%d. %s (ID:%d) - %s -> 病房%d, 床位%d\n",
+                           patientCount, bed->patientName, bed->patientId,
+                           dept->departmentName, ward->wardNumber, bed->bedNumber);
+                }
+                bed = bed->next;
+            }
+            ward = ward->next;
+        }
+        dept = dept->next;
+    }
+    
+    if (patientCount == 0) {
+        fprintf(file, "当前无住院患者\n");
+    } else {
+        fprintf(file, "\n患者总数: %d\n", patientCount);
+    }
+
+    fprintf(file, "\n第8节：使用的数据库文件\n");
     fprintf(file, "--------------------------------------------------------------------------------\n");
     fprintf(file, "本报告中的所有数据均从以下文本文件中读取：\n\n");
     fprintf(file, "  1. departments_db.txt  - 科室主数据\n");
     fprintf(file, "  2. wards_db.txt        - 病房主数据及占用信息\n");
     fprintf(file, "  3. beds_db.txt         - 床位状态及患者分配信息\n");
     fprintf(file, "  4. patients_db.txt     - 当前住院患者记录\n\n");
-    fprintf(file, "读取的床位总数: %d\n", stats.totalBeds);
-    fprintf(file, "读取的患者总数: %d\n", stats.totalPatients);
+    fprintf(file, "读取的床位总数: %d\n", totalBeds);
+    fprintf(file, "读取的患者总数: %d\n", totalPatients);
     fprintf(file, "数据时间戳: %s", ctime(&now));
 
     fprintf(file, "\n================================================================================\n");
@@ -1492,10 +1650,10 @@ void performDataAnalysis(Department* hospital) {
 
     fclose(file);
 
-    printSuccess("人工智能分析报告已从数据库生成！");
+    printSuccess("人工智能分析报告已从真实数据库数据生成！");
     printf("报告已保存到: %s\n", DB_ANALYSIS_FILE);
     printf("\n============================================================\n");
-    printf("  分析完成 - 数据来源于文本文件\n");
+    printf("  分析完成 - 数据来源于真实数据库文件\n");
     printf("  报告已保存到 ai_analysis_report.txt\n");
     printf("============================================================\n");
 }
@@ -1601,33 +1759,46 @@ void handleReleaseBed(Department* hospital) {
     }
 }
 
-// ==================== 主入口 ====================
+// ==================== 主入口 - 修复的关键部分 ====================
 static Department* g_hospital = NULL;
 
 void init_hospital_globals(void) {
     printf("\n[模块 D] 初始化中...\n");
-
-    if (!isDatabaseEmpty()) {
-        printInfo("正在从文本文件加载现有数据库...");
-        if (loadAllDataFromDB(&g_hospital) == SUCCESS) {
-            printSuccess("数据已从数据库文件加载！");
-
-            // 显示加载的摘要信息
-            int totalPatients = 0, totalBeds = 0;
+    
+    // 首先检查数据库是否有数据
+    int hasData = checkDatabaseIntegrity();
+    
+    if (hasData) {
+        printInfo("找到现有数据库文件，正在加载...");
+        
+        // 加载数据库
+        if (loadAllDataFromDB(&g_hospital) == SUCCESS && g_hospital != NULL) {
+            printSuccess("数据库加载成功！");
+            
+            // 显示加载的数据摘要
+            int totalDept = 0, totalWard = 0, totalBed = 0, totalPat = 0;
             Department* dept = g_hospital;
             while (dept) {
-                totalPatients += dept->totalPatients;
-                totalBeds += dept->totalBeds;
+                totalDept++;
+                totalWard += dept->totalWards;
+                totalBed += dept->totalBeds;
+                totalPat += dept->totalPatients;
                 dept = dept->next;
             }
-            printf("  已加载: %d 名患者, %d 张床位（来自文本数据库）\n", totalPatients, totalBeds);
+            printf("  已加载: %d 个科室, %d 个病房, %d 张床位, %d 名患者\n", 
+                   totalDept, totalWard, totalBed, totalPat);
             return;
+        } else {
+            printError("数据库文件损坏或格式错误，将创建新数据库...");
         }
+    } else {
+        printInfo("未找到数据库文件，正在创建新数据库...");
     }
-
-    printInfo("未找到数据库。正在创建新数据库...");
+    
+    // 如果没有数据或加载失败，创建新的数据库
     g_hospital = initializeHospital();
     saveAllDataToDB(g_hospital);
+    printSuccess("新数据库已创建并保存！");
 }
 
 int D_entry(void) {
@@ -1638,6 +1809,7 @@ int D_entry(void) {
     }
 
     printf("\n[模块 D] 就绪 - 实时数据库模式（文本文件）\n");
+    printDatabaseSummary(g_hospital);
 
     do {
         printMainMenu();
