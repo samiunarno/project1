@@ -3,6 +3,6 @@
 #include "utils.h"
 
 /* Module C implementation */
-void module_c_init(void) {
+void C_entry(void) {
     print_message("Module C initialized.");
 }

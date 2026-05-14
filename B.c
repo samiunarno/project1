@@ -3,6 +3,6 @@
 #include "utils.h"
 
 /* Module B implementation */
-void module_b_init(void) {
+void B_entry(void) {
     print_message("Module B initialized.");
 }
