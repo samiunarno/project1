@@ -1,0 +1,30 @@
+============================================================
+HOSPITAL STATISTICS REPORT (LIVE DB DATA)
+============================================================
+
+Report Date: Thu May 14 23:25:27 2026
+
+
+HOSPITAL OVERVIEW
+------------------------------------------------------------
+Total Departments:       5
+Total Wards:             81
+Total Beds:              630
+Total Patients:          0
+Overall Occupancy Rate:  0.0%
+
+DEPARTMENT BREAKDOWN
+------------------------------------------------------------
+心血管内科     : 0.0% occupancy rate
+外科              : 0.0% occupancy rate
+儿科              : 0.0% occupancy rate
+骨科              : 0.0% occupancy rate
+急诊科           : 0.0% occupancy rate
+
+OCCUPANCY VISUAL (each # = 5%)
+------------------------------------------------------------
+心血管内科         0% |                    |
+外科                  0% |                    |
+儿科                  0% |                    |
+骨科                  0% |                    |
+急诊科               0% |                    |
