@@ -1265,24 +1265,24 @@ Department* initializeHospital(void) {
     addWardToDepartment(dept5, createWard(501, "急诊留观室", 15));
     addWardToDepartment(dept5, createWard(502, "EICU抢救室", 6));
 
-    // --- 科室 6: 妇产科 (30张床) ---
+    // --- 科室 6: 妇产科 (20张床) ---
     Department* dept6 = createDepartment(6, "妇产科");
-    addWardToDepartment(dept6, createWard(601, "产后康复病房", 20));
+    addWardToDepartment(dept6, createWard(601, "产后康复病房", 10));
     addWardToDepartment(dept6, createWard(602, "待产/LDR病房", 10));
 
-    // --- 科室 7: 神经内科 (30张床) ---
+    // --- 科室 7: 神经内科 (20张床) ---
     Department* dept7 = createDepartment(7, "神经内科");
-    addWardToDepartment(dept7, createWard(701, "卒中中心病房", 15));
-    addWardToDepartment(dept7, createWard(702, "神内普通病房", 15));
+    addWardToDepartment(dept7, createWard(701, "卒中中心病房", 5));
+    addWardToDepartment(dept7, createWard(702, "神内普通病房", 5));
 
-    // --- 科室 8: 呼吸内科 (30张床) ---
+    // --- 科室 8: 呼吸内科 (10张床) ---
     Department* dept8 = createDepartment(8, "呼吸内科");
-    addWardToDepartment(dept8, createWard(801, "呼吸重症监护", 10));
-    addWardToDepartment(dept8, createWard(802, "呼吸综合病房", 20));
+    addWardToDepartment(dept8, createWard(801, "呼吸重症监护", 5));
+    addWardToDepartment(dept8, createWard(802, "呼吸综合病房", 5));
 
-    // --- 科室 9: 康复科 (25张床) ---
+    // --- 科室 9: 康复科 (5张床) ---
     Department* dept9 = createDepartment(9, "康复科");
-    addWardToDepartment(dept9, createWard(901, "康复功能训练病房", 25));
+    addWardToDepartment(dept9, createWard(901, "康复功能训练病房", 5));
 
     // --- 科室 10: 传染科 (15张床) ---
     Department* dept10 = createDepartment(10, "传染科");
