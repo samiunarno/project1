@@ -198,7 +198,6 @@ int getValidatedIntInput(const char* prompt, int min, int max) {
 }
 
 // ==================== Real-time Database Functions ====================
-// Implementation remains identical to original for logic, omitted repetitious error prints
 
 int saveDepartmentsToDB(Department* hospital) {
     FILE* file = fopen(DB_DEPARTMENTS_FILE, "w");
@@ -675,7 +674,7 @@ int admitPatient(Department* hospital, int departmentId, int wardNumber,
         }
         dept = dept->next;
     }
-    printf("错误：未找到科室\n");
+    printf("错误：未找到该科室\n");
     return FAILURE;
 }
 
@@ -761,7 +760,7 @@ void displayAllPatients(Department* hospital) {
             while (bed != NULL) {
                 if (bed->status == STATUS_OCCUPIED) {
                     count++;
-                    printf("%2d. %-8s (编号:%-6d ) %s -> 病房 %d, 床位 %d\n",
+                    printf("%2d. %-10s (编号:%-6d ) %s -> 病房 %d, 床位 %d\n",
                            count, bed->patientName, bed->patientId,
                            dept->departmentName, ward->wardNumber, bed->bedNumber);
                 }
@@ -777,7 +776,7 @@ void displayAllPatients(Department* hospital) {
 int transferPatient(Department* hospital, int patientId, int newDepartmentId, int newWardNumber, int newBedNumber) {
     PatientInfo oldInfo;
     if (!findPatientLocation(hospital, patientId, &oldInfo)) {
-        printf("错误：未找到患者编号 %d\n", patientId);
+        printf("错误：未找到该患者编号 %d\n", patientId);
         return FAILURE;
     }
     
@@ -954,7 +953,7 @@ void handleReleaseBed(Department* hospital) {
                 if (bed != NULL && bed->status == STATUS_OCCUPIED) {
                     printf("\n%d号床位 当前患者：%s (编号：%d)\n", bedNum, bed->patientName, bed->patientId);
                     char confirm;
-                    printf("确认释放该床位？(y/n): ");
+                    printf("确认释放该床位？(y/n)：");
                     scanf(" %c", &confirm);
                     clearInputBuffer();
                     if (confirm == 'y' || confirm == 'Y') {
