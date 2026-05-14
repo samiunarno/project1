@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
 
 #define MAX_NAME_LENGTH 100
 #define MAX_DEPARTMENTS 10
@@ -17,6 +18,14 @@
 #define DB_WARDS_FILE "wards_db.txt"
 #define DB_BEDS_FILE "beds_db.txt"
 #define DB_PATIENTS_FILE "patients_db.txt"
+
+// Color codes for better UI (optional, works on most terminals)
+#define COLOR_GREEN "\033[0;32m"
+#define COLOR_RED "\033[0;31m"
+#define COLOR_YELLOW "\033[0;33m"
+#define COLOR_BLUE "\033[0;34m"
+#define COLOR_CYAN "\033[0;36m"
+#define COLOR_RESET "\033[0m"
 
 typedef enum {
     STATUS_AVAILABLE = 0,
@@ -120,6 +129,18 @@ int transferPatient(Department* hospital, int patientId, int newDepartmentId,
                     int newWardNumber, int newBedNumber);
 
 int getValidatedIntInput(const char* prompt, int min, int max);
+int getValidatedPatientId(Department* hospital, const char* prompt, int forAdmission);
+int isValidName(const char* name);
+void clearInputBuffer(void);
+void printSuccess(const char* message);
+void printError(const char* message);
+void printInfo(const char* message);
+void printHeader(const char* title);
+void printSeparator(void);
+void displayDepartmentList(void);
+void displayWardListForDepartment(int deptId);
+int getValidatedWardNumber(int deptId);
+int getValidatedBedNumber(int wardNumber);  // Removed unused deptId parameter
 void freeHospitalSystem(Department** hospital);
 void printMemoryReport(void);
 void printMainMenu(void);
@@ -146,18 +167,305 @@ int loadAllDataFromDB(Department** hospital);
 int isDatabaseEmpty(void);
 void createBackup(void);
 
+// ==================== Utility Functions for Better UX ====================
+
+void clearInputBuffer(void) {
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+}
+
+void printSuccess(const char* message) {
+    printf(COLOR_GREEN "✓ %s" COLOR_RESET "\n", message);
+}
+
+void printError(const char* message) {
+    printf(COLOR_RED "✗ Error: %s" COLOR_RESET "\n", message);
+}
+
+void printInfo(const char* message) {
+    printf(COLOR_CYAN "ℹ %s" COLOR_RESET "\n", message);
+}
+
+void printHeader(const char* title) {
+    printf("\n" COLOR_BLUE "╔══════════════════════════════════════════════════════════════╗\n");
+    printf("║ %-60s ║\n", title);
+    printf("╚══════════════════════════════════════════════════════════════╝" COLOR_RESET "\n");
+}
+
+void printSeparator(void) {
+    printf(COLOR_YELLOW "------------------------------------------------------------\n" COLOR_RESET);
+}
+
+void displayDepartmentList(void) {
+    printf("\n" COLOR_CYAN "Available Departments:" COLOR_RESET "\n");
+    printf("  ┌────┬─────────────────────────┬──────────┬──────────┐\n");
+    printf("  │ ID │ Department Name         │ Wards    │ Beds     │\n");
+    printf("  ├────┼─────────────────────────┼──────────┼──────────┤\n");
+    printf("  │ 1  │ Cardiology              │ 3 wards  │ 20 beds  │\n");
+    printf("  │ 2  │ Surgery                 │ 2 wards  │ 15 beds  │\n");
+    printf("  │ 3  │ Pediatrics              │ 2 wards  │ 15 beds  │\n");
+    printf("  │ 4  │ Orthopedics             │ 1 ward   │ 10 beds  │\n");
+    printf("  │ 5  │ Emergency               │ 1 ward   │ 15 beds  │\n");
+    printf("  └────┴─────────────────────────┴──────────┴──────────┘\n");
+}
+
+void displayWardListForDepartment(int deptId) {
+    printf("\n" COLOR_CYAN "Available Wards for " COLOR_RESET);
+    switch(deptId) {
+        case 1:
+            printf("Cardiology:\n");
+            printf("  ┌─────┬──────────────────────────┬──────────┐\n");
+            printf("  │ No. │ Ward Name                 │ Beds     │\n");
+            printf("  ├─────┼──────────────────────────┼──────────┤\n");
+            printf("  │ 101 │ Cardiology General Ward  │ 10 beds  │\n");
+            printf("  │ 102 │ Cardiology ICU           │ 5 beds   │\n");
+            printf("  │ 103 │ Cardiology Private Room  │ 5 beds   │\n");
+            printf("  └─────┴──────────────────────────┴──────────┘\n");
+            break;
+        case 2:
+            printf("Surgery:\n");
+            printf("  ┌─────┬──────────────────────────┬──────────┐\n");
+            printf("  │ No. │ Ward Name                 │ Beds     │\n");
+            printf("  ├─────┼──────────────────────────┼──────────┤\n");
+            printf("  │ 201 │ Surgery General Ward      │ 10 beds  │\n");
+            printf("  │ 202 │ Surgery Private Room      │ 5 beds   │\n");
+            printf("  └─────┴──────────────────────────┴──────────┘\n");
+            break;
+        case 3:
+            printf("Pediatrics:\n");
+            printf("  ┌─────┬──────────────────────────┬──────────┐\n");
+            printf("  │ No. │ Ward Name                 │ Beds     │\n");
+            printf("  ├─────┼──────────────────────────┼──────────┤\n");
+            printf("  │ 301 │ Pediatrics General Ward  │ 10 beds  │\n");
+            printf("  │ 302 │ Pediatrics Isolation     │ 5 beds   │\n");
+            printf("  └─────┴──────────────────────────┴──────────┘\n");
+            break;
+        case 4:
+            printf("Orthopedics:\n");
+            printf("  ┌─────┬──────────────────────────┬──────────┐\n");
+            printf("  │ No. │ Ward Name                 │ Beds     │\n");
+            printf("  ├─────┼──────────────────────────┼──────────┤\n");
+            printf("  │ 401 │ Orthopedics General Ward │ 10 beds  │\n");
+            printf("  └─────┴──────────────────────────┴──────────┘\n");
+            break;
+        case 5:
+            printf("Emergency:\n");
+            printf("  ┌─────┬──────────────────────────┬──────────┐\n");
+            printf("  │ No. │ Ward Name                 │ Beds     │\n");
+            printf("  ├─────┼──────────────────────────┼──────────┤\n");
+            printf("  │ 501 │ Emergency Observation    │ 10 beds  │\n");
+            printf("  └─────┴──────────────────────────┴──────────┘\n");
+            break;
+    }
+}
+
+int isValidName(const char* name) {
+    if (name == NULL || strlen(name) == 0) return 0;
+    for (int i = 0; name[i] != '\0'; i++) {
+        if (!isalpha(name[i]) && name[i] != ' ' && name[i] != '-') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int getValidatedIntInput(const char* prompt, int min, int max) {
+    int value;
+    int valid;
+    char input[100];
+    
+    do {
+        printf("%s", prompt);
+        printf(COLOR_YELLOW "[%d-%d]" COLOR_RESET ": ", min, max);
+        
+        if (fgets(input, sizeof(input), stdin) != NULL) {
+            if (sscanf(input, "%d", &value) == 1) {
+                if (value >= min && value <= max) {
+                    valid = 1;
+                } else {
+                    printError("Input out of range!");
+                    printf("   Please enter a number between %d and %d.\n", min, max);
+                    valid = 0;
+                }
+            } else {
+                printError("Invalid input! Please enter a valid number.");
+                valid = 0;
+            }
+        } else {
+            valid = 0;
+        }
+    } while (!valid);
+    
+    return value;
+}
+
+int getValidatedPatientId(Department* hospital, const char* prompt, int forAdmission) {
+    int patientId;
+    int valid;
+    char input[100];
+    
+    do {
+        printf("%s", prompt);
+        printf(COLOR_YELLOW "[1-99999]" COLOR_RESET ": ");
+        
+        if (fgets(input, sizeof(input), stdin) != NULL) {
+            if (sscanf(input, "%d", &patientId) == 1) {
+                if (patientId >= 1 && patientId <= 99999) {
+                    if (forAdmission) {
+                        // Check if patient ID already exists
+                        PatientInfo info;
+                        if (findPatientLocation(hospital, patientId, &info) == SUCCESS) {
+                            printError("Patient ID already exists!");
+                            printf("   Patient '%s' is already admitted.\n", info.patientName);
+                            valid = 0;
+                        } else {
+                            valid = 1;
+                        }
+                    } else {
+                        // For discharge/transfer, check if patient exists
+                        PatientInfo info;
+                        if (findPatientLocation(hospital, patientId, &info) != SUCCESS) {
+                            printError("Patient ID not found!");
+                            printf("   No patient with ID %d is currently admitted.\n", patientId);
+                            valid = 0;
+                        } else {
+                            valid = 1;
+                        }
+                    }
+                } else {
+                    printError("Patient ID must be between 1 and 99999!");
+                    valid = 0;
+                }
+            } else {
+                printError("Invalid input! Please enter a valid number.");
+                valid = 0;
+            }
+        } else {
+            valid = 0;
+        }
+    } while (!valid);
+    
+    return patientId;
+}
+
+int getValidatedWardNumber(int deptId) {
+    int wardNum;
+    int valid;
+    char input[100];
+    int validWards[5] = {0};
+    int validCount = 0;
+    
+    // Determine valid wards for this department
+    switch(deptId) {
+        case 1: 
+            validWards[0]=101; validWards[1]=102; validWards[2]=103; 
+            validCount=3; 
+            break;
+        case 2: 
+            validWards[0]=201; validWards[1]=202; 
+            validCount=2; 
+            break;
+        case 3: 
+            validWards[0]=301; validWards[1]=302; 
+            validCount=2; 
+            break;
+        case 4: 
+            validWards[0]=401; 
+            validCount=1; 
+            break;
+        case 5: 
+            validWards[0]=501; 
+            validCount=1; 
+            break;
+    }
+    
+    do {
+        printf("Enter ward number: ");
+        printf(COLOR_YELLOW "[");
+        for(int i=0; i<validCount; i++) {
+            printf("%d%s", validWards[i], (i<validCount-1) ? "/" : "");
+        }
+        printf("]" COLOR_RESET ": ");
+        
+        if (fgets(input, sizeof(input), stdin) != NULL) {
+            if (sscanf(input, "%d", &wardNum) == 1) {
+                valid = 0;
+                for(int i=0; i<validCount; i++) {
+                    if (wardNum == validWards[i]) {
+                        valid = 1;
+                        break;
+                    }
+                }
+                if (!valid) {
+                    printError("Invalid ward number for this department!");
+                    printf("   Please choose from: ");
+                    for(int i=0; i<validCount; i++) {
+                        printf("%d%s", validWards[i], (i<validCount-1) ? ", " : "");
+                    }
+                    printf("\n");
+                }
+            } else {
+                printError("Invalid input! Please enter a valid number.");
+                valid = 0;
+            }
+        } else {
+            valid = 0;
+        }
+    } while (!valid);
+    
+    return wardNum;
+}
+
+// FIXED: Removed unused deptId parameter
+int getValidatedBedNumber(int wardNumber) {
+    int bedNum;
+    int valid;
+    char input[100];
+    int maxBed = 10; // Default
+    
+    // Determine max beds based on ward number (ICU and Private rooms have 5 beds)
+    if (wardNumber == 102 || wardNumber == 103 || wardNumber == 202 || 
+        wardNumber == 302) {
+        maxBed = 5;
+    } else {
+        maxBed = 10;
+    }
+    
+    do {
+        printf("Enter bed number: ");
+        printf(COLOR_YELLOW "[1-%d]" COLOR_RESET ": ", maxBed);
+        
+        if (fgets(input, sizeof(input), stdin) != NULL) {
+            if (sscanf(input, "%d", &bedNum) == 1) {
+                if (bedNum >= 1 && bedNum <= maxBed) {
+                    valid = 1;
+                } else {
+                    printError("Bed number out of range!");
+                    printf("   This ward has beds 1 to %d only.\n", maxBed);
+                    valid = 0;
+                }
+            } else {
+                printError("Invalid input! Please enter a valid number.");
+                valid = 0;
+            }
+        } else {
+            valid = 0;
+        }
+    } while (!valid);
+    
+    return bedNum;
+}
+
 // ==================== Database Functions ====================
 
 int saveDepartmentsToDB(Department* hospital) {
     FILE* file = fopen(DB_DEPARTMENTS_FILE, "w");
     if (file == NULL) {
-        printf("Error: Cannot open departments database file for writing\n");
+        printError("Cannot open departments database file");
         return FAILURE;
     }
     
     Department* dept = hospital;
-    int count = 0;
-    
     while (dept != NULL) {
         fprintf(file, "%d|%s|%d|%d|%d\n", 
                 dept->departmentId,
@@ -166,7 +474,6 @@ int saveDepartmentsToDB(Department* hospital) {
                 dept->totalBeds,
                 dept->totalPatients);
         dept = dept->next;
-        count++;
     }
     
     fclose(file);
@@ -176,13 +483,11 @@ int saveDepartmentsToDB(Department* hospital) {
 int saveWardsToDB(Department* hospital) {
     FILE* file = fopen(DB_WARDS_FILE, "w");
     if (file == NULL) {
-        printf("Error: Cannot open wards database file for writing\n");
+        printError("Cannot open wards database file");
         return FAILURE;
     }
     
     Department* dept = hospital;
-    int count = 0;
-    
     while (dept != NULL) {
         Ward* ward = dept->wardList;
         while (ward != NULL) {
@@ -193,7 +498,6 @@ int saveWardsToDB(Department* hospital) {
                     ward->totalBeds,
                     ward->occupiedBeds);
             ward = ward->next;
-            count++;
         }
         dept = dept->next;
     }
@@ -205,13 +509,11 @@ int saveWardsToDB(Department* hospital) {
 int saveBedsToDB(Department* hospital) {
     FILE* file = fopen(DB_BEDS_FILE, "w");
     if (file == NULL) {
-        printf("Error: Cannot open beds database file for writing\n");
+        printError("Cannot open beds database file");
         return FAILURE;
     }
     
     Department* dept = hospital;
-    int count = 0;
-    
     while (dept != NULL) {
         Ward* ward = dept->wardList;
         while (ward != NULL) {
@@ -225,7 +527,6 @@ int saveBedsToDB(Department* hospital) {
                         bed->patientId,
                         bed->patientName);
                 bed = bed->next;
-                count++;
             }
             ward = ward->next;
         }
@@ -239,13 +540,11 @@ int saveBedsToDB(Department* hospital) {
 int savePatientsToDB(Department* hospital) {
     FILE* file = fopen(DB_PATIENTS_FILE, "w");
     if (file == NULL) {
-        printf("Error: Cannot open patients database file for writing\n");
+        printError("Cannot open patients database file");
         return FAILURE;
     }
     
     Department* dept = hospital;
-    int count = 0;
-    
     while (dept != NULL) {
         Ward* ward = dept->wardList;
         while (ward != NULL) {
@@ -258,7 +557,6 @@ int savePatientsToDB(Department* hospital) {
                             dept->departmentId,
                             ward->wardNumber,
                             bed->bedNumber);
-                    count++;
                 }
                 bed = bed->next;
             }
@@ -272,19 +570,14 @@ int savePatientsToDB(Department* hospital) {
 }
 
 int saveAllDataToDB(Department* hospital) {
-    int result = SUCCESS;
+    if (saveDepartmentsToDB(hospital) == FAILURE) return FAILURE;
+    if (saveWardsToDB(hospital) == FAILURE) return FAILURE;
+    if (saveBedsToDB(hospital) == FAILURE) return FAILURE;
+    if (savePatientsToDB(hospital) == FAILURE) return FAILURE;
     
-    if (saveDepartmentsToDB(hospital) == FAILURE) result = FAILURE;
-    if (saveWardsToDB(hospital) == FAILURE) result = FAILURE;
-    if (saveBedsToDB(hospital) == FAILURE) result = FAILURE;
-    if (savePatientsToDB(hospital) == FAILURE) result = FAILURE;
-    
-    if (result == SUCCESS) {
-        printf("  ✓ Database saved successfully\n");
-        createBackup();
-    }
-    
-    return result;
+    printSuccess("Database saved successfully");
+    createBackup();
+    return SUCCESS;
 }
 
 int loadDepartmentsFromDB(Department** hospital) {
@@ -295,7 +588,6 @@ int loadDepartmentsFromDB(Department** hospital) {
     
     char line[512];
     Department* tail = NULL;
-    int count = 0;
     
     while (fgets(line, sizeof(line), file)) {
         int deptId, totalWards, totalBeds, totalPatients;
@@ -316,11 +608,10 @@ int loadDepartmentsFromDB(Department** hospital) {
             tail->next = dept;
             tail = dept;
         }
-        count++;
     }
     
     fclose(file);
-    return (count > 0) ? SUCCESS : FAILURE;
+    return SUCCESS;
 }
 
 int loadWardsFromDB(Department* hospital) {
@@ -330,7 +621,6 @@ int loadWardsFromDB(Department* hospital) {
     }
     
     char line[512];
-    int count = 0;
     
     while (fgets(line, sizeof(line), file)) {
         int deptId, wardNumber, totalBeds, occupiedBeds;
@@ -345,7 +635,6 @@ int loadWardsFromDB(Department* hospital) {
                 Ward* ward = createWard(wardNumber, wardName, totalBeds);
                 ward->occupiedBeds = occupiedBeds;
                 addWardToDepartment(dept, ward);
-                count++;
                 break;
             }
             dept = dept->next;
@@ -353,7 +642,7 @@ int loadWardsFromDB(Department* hospital) {
     }
     
     fclose(file);
-    return (count > 0) ? SUCCESS : FAILURE;
+    return SUCCESS;
 }
 
 int loadBedsFromDB(Department* hospital) {
@@ -363,7 +652,6 @@ int loadBedsFromDB(Department* hospital) {
     }
     
     char line[512];
-    int count = 0;
     
     while (fgets(line, sizeof(line), file)) {
         int deptId, wardNumber, bedNumber, status, patientId;
@@ -384,7 +672,6 @@ int loadBedsFromDB(Department* hospital) {
                             bed->patientId = patientId;
                             strcpy(bed->patientName, patientName);
                         }
-                        count++;
                     }
                 }
                 break;
@@ -394,7 +681,7 @@ int loadBedsFromDB(Department* hospital) {
     }
     
     fclose(file);
-    return (count > 0) ? SUCCESS : FAILURE;
+    return SUCCESS;
 }
 
 int loadPatientsFromDB(Department* hospital) {
@@ -404,7 +691,6 @@ int loadPatientsFromDB(Department* hospital) {
     }
     
     char line[512];
-    int count = 0;
     
     while (fgets(line, sizeof(line), file)) {
         int patientId, deptId, wardNumber, bedNumber;
@@ -422,7 +708,6 @@ int loadPatientsFromDB(Department* hospital) {
                     if (bed != NULL && bed->status == STATUS_AVAILABLE) {
                         occupyBed(bed, patientId, patientName);
                         ward->occupiedBeds++;
-                        count++;
                     }
                 }
                 break;
@@ -433,7 +718,7 @@ int loadPatientsFromDB(Department* hospital) {
     
     fclose(file);
     updateDepartmentStats(hospital);
-    return (count > 0) ? SUCCESS : FAILURE;
+    return SUCCESS;
 }
 
 int loadAllDataFromDB(Department** hospital) {
@@ -500,7 +785,7 @@ void createBackup(void) {
 Bed* createBed(int bedNumber) {
     Bed* bed = (Bed*)malloc(sizeof(Bed));
     if (bed == NULL) {
-        printf("Bed memory allocation failed\n");
+        printError("Bed memory allocation failed");
         return NULL;
     }
     initializeBed(bed, bedNumber);
@@ -537,10 +822,10 @@ void displayBed(const Bed* bed) {
     if (bed == NULL) return;
     
     if (bed->status == STATUS_OCCUPIED) {
-        printf("  Bed %2d: [OCCUPIED] Patient: %s (ID: %d)\n", 
+        printf("  Bed %2d: " COLOR_RED "[OCCUPIED]" COLOR_RESET " Patient: %s (ID: %d)\n", 
                bed->bedNumber, bed->patientName, bed->patientId);
     } else {
-        printf("  Bed %2d: [AVAILABLE]\n", bed->bedNumber);
+        printf("  Bed %2d: " COLOR_GREEN "[AVAILABLE]" COLOR_RESET "\n", bed->bedNumber);
     }
 }
 
@@ -554,7 +839,7 @@ void freeBed(Bed* bed) {
 Ward* createWard(int wardNumber, const char* wardName, int totalBeds) {
     Ward* ward = (Ward*)malloc(sizeof(Ward));
     if (ward == NULL) {
-        printf("Ward memory allocation failed\n");
+        printError("Ward memory allocation failed");
         return NULL;
     }
     
@@ -614,22 +899,27 @@ void displayWardBeds(const Ward* ward) {
     if (ward == NULL) return;
     
     Bed* current = ward->bedList;
+    int count = 0;
     while (current != NULL) {
         displayBed(current);
         current = current->next;
+        count++;
+        if (count % 5 == 0 && count < ward->totalBeds) {
+            printf("  %s...%s\n", COLOR_YELLOW, COLOR_RESET);
+        }
     }
 }
 
 void displayWard(const Ward* ward) {
     if (ward == NULL) return;
     
-    printf("\n============================================================\n");
-    printf("Ward %d: %s\n", ward->wardNumber, ward->wardName);
+    printf("\n" COLOR_BLUE "============================================================" COLOR_RESET "\n");
+    printf(COLOR_CYAN "Ward %d: %s" COLOR_RESET "\n", ward->wardNumber, ward->wardName);
     printf("Occupancy: %d/%d beds (%.1f%%)\n", 
            ward->occupiedBeds, ward->totalBeds, getWardOccupancyRate(ward));
-    printf("------------------------------------------------------------\n");
+    printf(COLOR_YELLOW "------------------------------------------------------------" COLOR_RESET "\n");
     displayWardBeds(ward);
-    printf("============================================================\n");
+    printf(COLOR_BLUE "============================================================" COLOR_RESET "\n");
 }
 
 void freeWard(Ward* ward) {
@@ -649,7 +939,7 @@ void freeWard(Ward* ward) {
 Department* createDepartment(int departmentId, const char* departmentName) {
     Department* department = (Department*)malloc(sizeof(Department));
     if (department == NULL) {
-        printf("Department memory allocation failed\n");
+        printError("Department memory allocation failed");
         return NULL;
     }
     
@@ -710,11 +1000,11 @@ void updateDepartmentStats(Department* department) {
 void displayDepartment(const Department* department) {
     if (department == NULL) return;
     
-    printf("\n============================================================\n");
-    printf("Department: %s (ID: %d)\n", department->departmentName, department->departmentId);
+    printf("\n" COLOR_BLUE "============================================================" COLOR_RESET "\n");
+    printf(COLOR_CYAN "Department: %s (ID: %d)" COLOR_RESET "\n", department->departmentName, department->departmentId);
     printf("Stats: %d patients | %d beds | %d wards\n", 
            department->totalPatients, department->totalBeds, department->totalWards);
-    printf("============================================================\n");
+    printf(COLOR_BLUE "============================================================" COLOR_RESET "\n");
     
     Ward* current = department->wardList;
     while (current != NULL) {
@@ -772,7 +1062,7 @@ HospitalStatistics collectStatistics(Department* hospital) {
 void exportStatisticsToFile(const HospitalStatistics* stats, const char* filename) {
     FILE* file = fopen(filename, "w");
     if (file == NULL) {
-        printf("Error: Cannot create report file\n");
+        printError("Cannot create report file");
         return;
     }
     
@@ -811,13 +1101,13 @@ void exportStatisticsToFile(const HospitalStatistics* stats, const char* filenam
     }
     
     fclose(file);
-    printf("✓ Text report exported to '%s'\n", filename);
+    printf(COLOR_GREEN "✓ Text report exported to '%s'\n" COLOR_RESET, filename);
 }
 
 void exportStatisticsToJSON(const HospitalStatistics* stats, const char* filename) {
     FILE* file = fopen(filename, "w");
     if (file == NULL) {
-        printf("Error: Cannot create JSON report file\n");
+        printError("Cannot create JSON report file");
         return;
     }
     
@@ -840,13 +1130,13 @@ void exportStatisticsToJSON(const HospitalStatistics* stats, const char* filenam
     }
     fprintf(file, "  ]\n}\n");
     fclose(file);
-    printf("✓ JSON report exported to '%s'\n", filename);
+    printf(COLOR_GREEN "✓ JSON report exported to '%s'\n" COLOR_RESET, filename);
 }
 
 void exportStatisticsToCSV(const HospitalStatistics* stats, const char* filename) {
     FILE* file = fopen(filename, "w");
     if (file == NULL) {
-        printf("Error: Cannot create CSV report file\n");
+        printError("Cannot create CSV report file");
         return;
     }
     
@@ -861,7 +1151,7 @@ void exportStatisticsToCSV(const HospitalStatistics* stats, const char* filename
     fprintf(file, "TOTAL,%d,%d,%.2f\n", 
             stats->totalPatients, stats->totalBeds, stats->overallOccupancyRate);
     fclose(file);
-    printf("✓ CSV report exported to '%s'\n", filename);
+    printf(COLOR_GREEN "✓ CSV report exported to '%s'\n" COLOR_RESET, filename);
 }
 
 void generateStatisticsReport(Department* hospital, ReportType type) {
@@ -871,7 +1161,7 @@ void generateStatisticsReport(Department* hospital, ReportType type) {
         exportStatisticsToFile(&stats, "hospital_report.txt");
         exportStatisticsToJSON(&stats, "hospital_report.json");
         exportStatisticsToCSV(&stats, "hospital_report.csv");
-        printf("\n✓ All reports generated successfully!\n");
+        printSuccess("All reports generated successfully!");
     }
 }
 
@@ -879,9 +1169,7 @@ void generateStatisticsReport(Department* hospital, ReportType type) {
 void printDepartmentDetails(Department* hospital) {
     if (hospital == NULL) return;
     
-    printf("\n============================================================\n");
-    printf("                    DEPARTMENT DETAILS\n");
-    printf("============================================================\n");
+    printHeader("DEPARTMENT DETAILS");
     
     Department* dept = hospital;
     while (dept != NULL) {
@@ -893,13 +1181,11 @@ void printDepartmentDetails(Department* hospital) {
 void printWardDetails(Department* hospital) {
     if (hospital == NULL) return;
     
-    printf("\n============================================================\n");
-    printf("                    WARD DETAILS\n");
-    printf("============================================================\n");
+    printHeader("WARD DETAILS");
     
     Department* dept = hospital;
     while (dept != NULL) {
-        printf("\n=== Department: %s ===\n", dept->departmentName);
+        printf("\n" COLOR_CYAN "=== Department: %s ===" COLOR_RESET "\n", dept->departmentName);
         Ward* ward = dept->wardList;
         while (ward != NULL) {
             displayWard(ward);
@@ -918,18 +1204,18 @@ int admitPatient(Department* hospital, int departmentId, int wardNumber,
         if (dept->departmentId == departmentId) {
             Ward* ward = findWardInDepartment(dept, wardNumber);
             if (ward == NULL) {
-                printf("Error: Department %d does not have ward %d\n", departmentId, wardNumber);
+                printError("Ward not found in this department");
                 return FAILURE;
             }
             
             Bed* bed = findBedInWard(ward, bedNumber);
             if (bed == NULL) {
-                printf("Error: Ward %d does not have bed %d\n", wardNumber, bedNumber);
+                printError("Bed not found in this ward");
                 return FAILURE;
             }
             
             if (!isBedAvailable(bed)) {
-                printf("Error: Bed %d is already occupied\n", bedNumber);
+                printError("Bed is already occupied");
                 return FAILURE;
             }
             
@@ -937,14 +1223,17 @@ int admitPatient(Department* hospital, int departmentId, int wardNumber,
             ward->occupiedBeds++;
             updateDepartmentStats(dept);
             
-            printf("\n✓ Patient admitted successfully!\n");
-            printf("  Department: %s\n", dept->departmentName);
-            printf("  Ward: %d - %s\n", ward->wardNumber, ward->wardName);
-            printf("  Bed: %d\n", bed->bedNumber);
-            printf("  Patient: %s (ID: %d)\n", patientName, patientId);
+            printf("\n");
+            printSuccess("Patient admitted successfully!");
+            printSeparator();
+            printf("  " COLOR_CYAN "Department:" COLOR_RESET " %s\n", dept->departmentName);
+            printf("  " COLOR_CYAN "Ward:" COLOR_RESET " %d - %s\n", ward->wardNumber, ward->wardName);
+            printf("  " COLOR_CYAN "Bed:" COLOR_RESET " %d\n", bed->bedNumber);
+            printf("  " COLOR_CYAN "Patient:" COLOR_RESET " %s (ID: %d)\n", patientName, patientId);
+            printSeparator();
             
-            // FIXED: Save to database after admission
-            printf("\n  Saving to database...\n");
+            printf("\n");
+            printInfo("Saving to database...");
             saveAllDataToDB(hospital);
             
             return SUCCESS;
@@ -952,7 +1241,7 @@ int admitPatient(Department* hospital, int departmentId, int wardNumber,
         dept = dept->next;
     }
     
-    printf("Error: Department %d not found\n", departmentId);
+    printError("Department not found");
     return FAILURE;
 }
 
@@ -966,29 +1255,33 @@ int dischargePatient(Department* hospital, int patientId) {
             Bed* bed = ward->bedList;
             while (bed != NULL) {
                 if (bed->status == STATUS_OCCUPIED && bed->patientId == patientId) {
-                    printf("\nPatient found:\n");
-                    printf("  Name: %s\n", bed->patientName);
-                    printf("  Department: %s\n", dept->departmentName);
-                    printf("  Ward: %d\n", ward->wardNumber);
-                    printf("  Bed: %d\n", bed->bedNumber);
+                    printf("\n");
+                    printHeader("PATIENT FOUND");
+                    printf("  " COLOR_CYAN "Name:" COLOR_RESET " %s\n", bed->patientName);
+                    printf("  " COLOR_CYAN "Department:" COLOR_RESET " %s\n", dept->departmentName);
+                    printf("  " COLOR_CYAN "Ward:" COLOR_RESET " %d\n", ward->wardNumber);
+                    printf("  " COLOR_CYAN "Bed:" COLOR_RESET " %d\n", bed->bedNumber);
+                    printSeparator();
                     
                     char confirm;
-                    printf("\nConfirm discharge? (y/n): ");
+                    printf("\n" COLOR_YELLOW "Confirm discharge? (y/n): " COLOR_RESET);
                     scanf(" %c", &confirm);
+                    clearInputBuffer();
                     
                     if (confirm == 'y' || confirm == 'Y') {
                         vacateBed(bed);
                         ward->occupiedBeds--;
                         updateDepartmentStats(dept);
-                        printf("\n✓ Patient discharged successfully!\n");
+                        printf("\n");
+                        printSuccess("Patient discharged successfully!");
                         
-                        // FIXED: Save to database after discharge
-                        printf("\n  Saving to database...\n");
+                        printf("\n");
+                        printInfo("Saving to database...");
                         saveAllDataToDB(hospital);
                         
                         return SUCCESS;
                     } else {
-                        printf("Discharge cancelled\n");
+                        printInfo("Discharge cancelled");
                         return FAILURE;
                     }
                 }
@@ -999,7 +1292,7 @@ int dischargePatient(Department* hospital, int patientId) {
         dept = dept->next;
     }
     
-    printf("Error: Patient ID %d not found\n", patientId);
+    printError("Patient ID not found");
     return FAILURE;
 }
 
@@ -1033,9 +1326,7 @@ int findPatientLocation(Department* hospital, int patientId, PatientInfo* info) 
 void displayAllPatients(Department* hospital) {
     if (hospital == NULL) return;
     
-    printf("\n============================================================\n");
-    printf("                    CURRENT INPATIENT LIST\n");
-    printf("============================================================\n");
+    printHeader("CURRENT INPATIENT LIST");
     
     int count = 0;
     Department* dept = hospital;
@@ -1047,7 +1338,7 @@ void displayAllPatients(Department* hospital) {
             while (bed != NULL) {
                 if (bed->status == STATUS_OCCUPIED) {
                     count++;
-                    printf("%2d. %-10s (ID:%-6d) %s → Ward %d, Bed %d\n",
+                    printf("%2d. " COLOR_CYAN "%-10s" COLOR_RESET " (ID:%-6d) %s → Ward %d, Bed %d\n",
                            count, bed->patientName, bed->patientId,
                            dept->departmentName, ward->wardNumber, bed->bedNumber);
                 }
@@ -1059,10 +1350,13 @@ void displayAllPatients(Department* hospital) {
     }
     
     if (count == 0) {
-        printf("No current inpatients\n");
+        printInfo("No current inpatients");
+    } else {
+        printSeparator();
+        printf("  " COLOR_YELLOW "Total patients: %d" COLOR_RESET "\n", count);
     }
     
-    printf("============================================================\n");
+    printf(COLOR_BLUE "============================================================" COLOR_RESET "\n");
 }
 
 int validateTransfer(Department* hospital, int patientId, int newDepartmentId, 
@@ -1079,13 +1373,13 @@ int validateTransfer(Department* hospital, int patientId, int newDepartmentId,
         if (dept->departmentId == newDepartmentId) {
             Ward* ward = findWardInDepartment(dept, newWardNumber);
             if (ward == NULL) {
-                sprintf(errorMessage, "Ward %d not found", newWardNumber);
+                sprintf(errorMessage, "Ward %d not found in department %d", newWardNumber, newDepartmentId);
                 return FAILURE;
             }
             
             Bed* bed = findBedInWard(ward, newBedNumber);
             if (bed == NULL) {
-                sprintf(errorMessage, "Bed %d not found", newBedNumber);
+                sprintf(errorMessage, "Bed %d not found in ward %d", newBedNumber, newWardNumber);
                 return FAILURE;
             }
             
@@ -1108,7 +1402,7 @@ int transferPatient(Department* hospital, int patientId, int newDepartmentId,
     char errorMessage[200];
     
     if (!validateTransfer(hospital, patientId, newDepartmentId, newWardNumber, newBedNumber, errorMessage)) {
-        printf("Error: %s\n", errorMessage);
+        printError(errorMessage);
         return FAILURE;
     }
     
@@ -1141,89 +1435,40 @@ int transferPatient(Department* hospital, int patientId, int newDepartmentId,
         newDept = newDept->next;
     }
     
-    printf("\n✓ Patient transfer successful!\n");
-    printf("  From: %s → Ward %d → Bed %d\n", 
+    printf("\n");
+    printSuccess("Patient transfer successful!");
+    printSeparator();
+    printf("  " COLOR_CYAN "From:" COLOR_RESET " %s → Ward %d → Bed %d\n", 
            oldInfo.patientName, oldInfo.wardNumber, oldInfo.bedNumber);
-    printf("  To  : Dept %d → Ward %d → Bed %d\n", 
+    printf("  " COLOR_CYAN "To:" COLOR_RESET "   Dept %d → Ward %d → Bed %d\n", 
            newDepartmentId, newWardNumber, newBedNumber);
+    printSeparator();
     
-    // FIXED: Save to database after transfer
-    printf("\n  Saving to database...\n");
+    printf("\n");
+    printInfo("Saving to database...");
     saveAllDataToDB(hospital);
     
     return SUCCESS;
 }
 
-// ==================== Utility Functions ====================
-int getValidatedIntInput(const char* prompt, int min, int max) {
-    int value;
-    int valid;
-    
-    do {
-        printf("%s", prompt);
-        valid = scanf("%d", &value);
-        
-        if (valid != 1) {
-            printf("Error: Please enter a valid number!\n");
-            while (getchar() != '\n');
-            valid = 0;
-        } else if (value < min || value > max) {
-            printf("Error: Please enter a number between %d and %d!\n", min, max);
-            valid = 0;
-        } else {
-            valid = 1;
-        }
-    } while (!valid);
-    
-    return value;
-}
-
-void freeHospitalSystem(Department** hospital) {
-    if (hospital == NULL || *hospital == NULL) return;
-    
-    Department* current = *hospital;
-    while (current != NULL) {
-        Department* next = current->next;
-        freeDepartment(current);
-        current = next;
-    }
-    
-    *hospital = NULL;
-}
-
-void printMemoryReport(void) {
-    printf("\n============================================================\n");
-    printf("MEMORY CLEANUP REPORT\n");
-    printf("============================================================\n");
-    printf("✓ All dynamically allocated memory released\n");
-    printf("✓ System resources cleaned up\n");
-    printf("============================================================\n");
-}
-
 // ==================== Menu Functions ====================
 void printMainMenu(void) {
     printf("\n");
-    printf("============================================================\n");
-    printf("                HOSPITAL MANAGEMENT SYSTEM\n");
-    printf("============================================================\n");
-    printf("  1.  Admit Patient\n");
-    printf("  2.  Transfer Patient (Ward/Bed)\n");
-    printf("  3.  Discharge Patient\n");
-    printf("  4.  Release Bed\n");
-    printf("  5.  View Department Information\n");
-    printf("  6.  View Ward Information\n");
-    printf("  7.  View All Inpatients\n");
-    printf("  8.  Generate Statistics Reports (TXT/JSON/CSV)\n");
-    printf("  9.  AI Data Analysis & Ward Optimization\n");
-    printf(" 10.  Backup Database Manually\n");
-    printf("  0.  Exit System\n");
-    printf("============================================================\n");
+    printf(COLOR_BLUE "╔════════════════════════════════════════════════════════════════════╗\n");
+    printf("║                       HOSPITAL MANAGEMENT SYSTEM                       ║\n");
+    printf("╠════════════════════════════════════════════════════════════════════════╣\n");
+    printf("║  " COLOR_GREEN "1. Admit Patient" COLOR_BLUE "              │ " COLOR_GREEN "6. View Ward Information" COLOR_BLUE "              ║\n");
+    printf("║  " COLOR_YELLOW "2. Transfer Patient" COLOR_BLUE "          │ " COLOR_CYAN "7. View All Inpatients" COLOR_BLUE "              ║\n");
+    printf("║  " COLOR_RED "3. Discharge Patient" COLOR_BLUE "           │ " COLOR_CYAN "8. Generate Reports" COLOR_BLUE "                 ║\n");
+    printf("║  " COLOR_YELLOW "4. Release Bed" COLOR_BLUE "              │ " COLOR_CYAN "9. AI Data Analysis" COLOR_BLUE "                ║\n");
+    printf("║  " COLOR_CYAN "5. View Department Info" COLOR_BLUE "       │ " COLOR_CYAN "10. Backup Database" COLOR_BLUE "                ║\n");
+    printf("╠════════════════════════════════════════════════════════════════════════╣\n");
+    printf("║                          " COLOR_RED "0. Exit System" COLOR_BLUE "                              ║\n");
+    printf("╚════════════════════════════════════════════════════════════════════════╝\n" COLOR_RESET);
 }
 
 Department* initializeHospital(void) {
-    printf("\n============================================================\n");
-    printf("              INITIALIZING HOSPITAL SYSTEM\n");
-    printf("============================================================\n");
+    printHeader("INITIALIZING HOSPITAL SYSTEM");
     
     // Department 1: Cardiology
     Department* hospital = createDepartment(1, "Cardiology");
@@ -1264,10 +1509,10 @@ Department* initializeHospital(void) {
     dept3->next = dept4;
     dept4->next = dept5;
     
-    printf("\n✓ Hospital system initialized successfully!\n");
-    printf("  - 5 Departments\n");
-    printf("  - 11 Wards\n");
-    printf("  - 75 Total Beds\n\n");
+    printSuccess("Hospital system initialized successfully!");
+    printf("  " COLOR_CYAN "•" COLOR_RESET " 5 Departments\n");
+    printf("  " COLOR_CYAN "•" COLOR_RESET " 11 Wards\n");
+    printf("  " COLOR_CYAN "•" COLOR_RESET " 75 Total Beds\n\n");
     
     return hospital;
 }
@@ -1277,13 +1522,13 @@ void performDataAnalysis(Department* hospital) {
     time_t now;
     time(&now);
     
-    printf("\n╔══════════════════════════════════════════════════════════════╗\n");
+    printf("\n" COLOR_BLUE "╔══════════════════════════════════════════════════════════════╗\n");
     printf("║       AI-ASSISTED DATA ANALYSIS & WARD OPTIMIZATION          ║\n");
     printf("║       Report Generated: %-38s║\n", ctime(&now));
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
+    printf("╚══════════════════════════════════════════════════════════════╝\n" COLOR_RESET);
     
     // Section 1: Current Load
-    printf("\n[1] WARD BED LINKED LIST — CURRENT LOAD\n");
+    printf("\n" COLOR_CYAN "[1] WARD BED LINKED LIST — CURRENT LOAD" COLOR_RESET "\n");
     printf("    (Traversing ward bed linked list)\n");
     printf("    %-14s %-8s %-8s %-10s\n",
            "Department", "Patients", "Beds", "Usage%%");
@@ -1308,7 +1553,7 @@ void performDataAnalysis(Department* hospital) {
            "[TOTAL]", totalPatients, totalBeds, overallRate);
     
     // Section 2: Bed Utilization ASCII Chart
-    printf("\n[2] BED UTILIZATION — ASCII VISUAL (each '#' ≈ 5%%)\n");
+    printf("\n" COLOR_CYAN "[2] BED UTILIZATION — ASCII VISUAL (each '#' ≈ 5%%)" COLOR_RESET "\n");
     printf("    %-14s  [%%]  0%%          50%%         100%%\n", "Department");
     printf("    %-14s        |-----------|-----------|\n", "");
     dept = hospital;
@@ -1319,14 +1564,14 @@ void performDataAnalysis(Department* hospital) {
         if (bars > 20) bars = 20;
         char bar[21] = {0};
         for (int i = 0; i < bars; i++) bar[i] = '#';
-        const char* flag = r > 75 ? " [HIGH!]" : (r < 25 ? " [LOW]" : "");
+        const char* flag = r > 75 ? COLOR_RED " [HIGH!]" COLOR_RESET : (r < 25 ? COLOR_YELLOW " [LOW]" COLOR_RESET : "");
         printf("    %-14s %4.0f%%  |%-20s|%s\n",
                dept->departmentName, r, bar, flag);
         dept = dept->next;
     }
     
     // Section 3: AI Predictions
-    printf("\n[3] AI PREDICTION ENGINE (Rule-based Trend Analysis)\n");
+    printf("\n" COLOR_CYAN "[3] AI PREDICTION ENGINE (Rule-based Trend Analysis)" COLOR_RESET "\n");
     printf("    Model: 3-month rolling average + seasonal factor\n");
     printf("    ─────────────────────────────────────────────────\n");
     
@@ -1335,76 +1580,166 @@ void performDataAnalysis(Department* hospital) {
         float r = dept->totalBeds > 0
             ? (float)dept->totalPatients / dept->totalBeds * 100 : 0;
         if (r > 70) {
-            printf("    [ALERT] %-14s occupancy=%.0f%% — URGENT: request %d emergency beds\n",
+            printf("    " COLOR_RED "[ALERT]" COLOR_RESET " %-14s occupancy=%.0f%% — URGENT: request %d emergency beds\n",
                    dept->departmentName, r,
                    (int)((r - 70) * dept->totalBeds / 100) + 1);
         } else if (r > 50) {
-            printf("    [WATCH] %-14s occupancy=%.0f%% — Monitor; prepare 1 additional ward standby\n",
+            printf("    " COLOR_YELLOW "[WATCH]" COLOR_RESET " %-14s occupancy=%.0f%% — Monitor; prepare 1 additional ward standby\n",
                    dept->departmentName, r);
         } else {
-            printf("    [OK]    %-14s occupancy=%.0f%% — Stable\n",
+            printf("    " COLOR_GREEN "[OK]" COLOR_RESET "    %-14s occupancy=%.0f%% — Stable\n",
                    dept->departmentName, r);
         }
         dept = dept->next;
     }
     
-    printf("\n    Seasonal Prediction (next 30 days):\n");
+    printf("\n    " COLOR_CYAN "Seasonal Prediction (next 30 days):" COLOR_RESET "\n");
     printf("      • Cardiology   : +18%% admissions (winter cardiovascular season)\n");
     printf("      • Pediatrics   : +12%% admissions (pediatric infection peak)\n");
     printf("      • Emergency    : +8%%  admissions (weather-related incidents)\n");
     printf("      • Surgery      : stable (±3%% normal variation)\n");
     printf("      • Orthopedics  : -5%%  admissions (post-holiday decline)\n");
     
-    printf("\n    Action Items:\n");
+    printf("\n    " COLOR_CYAN "Action Items:" COLOR_RESET "\n");
     if (overallRate > 70)
-        printf("      [!] Overall load HIGH (%.0f%%). Activate overflow protocol\n", overallRate);
-    printf("      [✓] Pre-allocate flexible beds for Cardiology & Pediatrics\n");
-    printf("      [✓] Stock cardiovascular and pediatric medicines before peak season\n");
-    printf("      [✓] Review discharge eligibility for stable long-stay patients\n");
+        printf("      " COLOR_RED "[!]" COLOR_RESET " Overall load HIGH (%.0f%%). Activate overflow protocol\n", overallRate);
+    printf("      " COLOR_GREEN "[✓]" COLOR_RESET " Pre-allocate flexible beds for Cardiology & Pediatrics\n");
+    printf("      " COLOR_GREEN "[✓]" COLOR_RESET " Stock cardiovascular and pediatric medicines before peak season\n");
+    printf("      " COLOR_GREEN "[✓]" COLOR_RESET " Review discharge eligibility for stable long-stay patients\n");
     
-    printf("\n╔══════════════════════════════════════════════════════════════╗\n");
+    printf("\n" COLOR_BLUE "╔══════════════════════════════════════════════════════════════╗\n");
     printf("║  Analysis complete. Reports available via option 8          ║\n");
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
+    printf("╚══════════════════════════════════════════════════════════════╝\n" COLOR_RESET);
 }
 
 // ==================== Handler Functions ====================
 void handleAdmitPatient(Department* hospital) {
-    printf("\n========== ADMIT PATIENT ==========\n");
+    printHeader("ADMIT PATIENT");
     
-    int deptId = getValidatedIntInput("Enter department ID (1-5): ", 1, 5);
-    int wardNum = getValidatedIntInput("Enter ward number (101-501): ", 101, 501);
-    int bedNum = getValidatedIntInput("Enter bed number (1-10): ", 1, 10);
-    int patientId = getValidatedIntInput("Enter patient ID: ", 1, 99999);
+    displayDepartmentList();
+    
+    int deptId = getValidatedIntInput("\nEnter department ID", 1, 5);
+    
+    displayWardListForDepartment(deptId);
+    int wardNum = getValidatedWardNumber(deptId);
+    
+    // FIXED: Removed deptId parameter from getValidatedBedNumber
+    int bedNum = getValidatedBedNumber(wardNum);
+    
+    // Check if bed is available
+    Department* dept = hospital;
+    while (dept != NULL) {
+        if (dept->departmentId == deptId) {
+            Ward* ward = findWardInDepartment(dept, wardNum);
+            if (ward != NULL) {
+                Bed* bed = findBedInWard(ward, bedNum);
+                if (bed != NULL && !isBedAvailable(bed)) {
+                    printError("This bed is already occupied!");
+                    printf("   Bed %d is currently occupied by: %s (ID: %d)\n", 
+                           bedNum, bed->patientName, bed->patientId);
+                    return;
+                }
+            }
+            break;
+        }
+        dept = dept->next;
+    }
+    
+    int patientId = getValidatedIntInput("Enter patient ID", 1, 99999);
+    
+    // Check if patient ID already exists
+    PatientInfo existingPatient;
+    if (findPatientLocation(hospital, patientId, &existingPatient) == SUCCESS) {
+        printError("Patient ID already exists!");
+        printf("   Patient '%s' is already admitted.\n", existingPatient.patientName);
+        return;
+    }
     
     char patientName[MAX_NAME_LENGTH];
-    printf("Enter patient name: ");
-    scanf("%s", patientName);
+    int validName = 0;
+    do {
+        printf("Enter patient name (letters only): ");
+        if (fgets(patientName, sizeof(patientName), stdin) != NULL) {
+            patientName[strcspn(patientName, "\n")] = 0;
+            if (isValidName(patientName) && strlen(patientName) > 0) {
+                validName = 1;
+            } else {
+                printError("Invalid name! Use only letters, spaces, or hyphens.");
+            }
+        }
+    } while (!validName);
     
     admitPatient(hospital, deptId, wardNum, bedNum, patientId, patientName);
 }
 
 void handleTransferPatient(Department* hospital) {
-    printf("\n========== TRANSFER PATIENT ==========\n");
+    printHeader("TRANSFER PATIENT");
     
-    int patientId = getValidatedIntInput("Enter patient ID to transfer: ", 1, 99999);
-    int newDeptId = getValidatedIntInput("Enter new department ID (1-5): ", 1, 5);
-    int newWardNum = getValidatedIntInput("Enter new ward number: ", 101, 501);
-    int newBedNum = getValidatedIntInput("Enter new bed number: ", 1, 10);
+    // First, show all current patients
+    displayAllPatients(hospital);
+    
+    if (hospital == NULL || (hospital->totalPatients == 0 && 
+        (hospital->next == NULL || (hospital->next && hospital->next->totalPatients == 0)))) {
+        // Simple check if any patients exist
+        int hasPatients = 0;
+        Department* dept = hospital;
+        while (dept) {
+            if (dept->totalPatients > 0) {
+                hasPatients = 1;
+                break;
+            }
+            dept = dept->next;
+        }
+        if (!hasPatients) {
+            printError("No patients to transfer!");
+            return;
+        }
+    }
+    
+    int patientId = getValidatedPatientId(hospital, "Enter patient ID to transfer", 0);
+    
+    // Get current patient info
+    PatientInfo currentInfo;
+    findPatientLocation(hospital, patientId, &currentInfo);
+    printf("\n" COLOR_CYAN "Current Location:" COLOR_RESET "\n");
+    printf("  Department: %d\n", currentInfo.departmentId);
+    printf("  Ward: %d\n", currentInfo.wardNumber);
+    printf("  Bed: %d\n", currentInfo.bedNumber);
+    
+    printf("\n");
+    displayDepartmentList();
+    int newDeptId = getValidatedIntInput("Enter NEW department ID", 1, 5);
+    
+    displayWardListForDepartment(newDeptId);
+    int newWardNum = getValidatedWardNumber(newDeptId);
+    
+    // FIXED: Removed deptId parameter from getValidatedBedNumber
+    int newBedNum = getValidatedBedNumber(newWardNum);
     
     transferPatient(hospital, patientId, newDeptId, newWardNum, newBedNum);
 }
 
 void handleDischargePatient(Department* hospital) {
-    printf("\n========== DISCHARGE PATIENT ==========\n");
-    int patientId = getValidatedIntInput("Enter patient ID to discharge: ", 1, 99999);
+    printHeader("DISCHARGE PATIENT");
+    
+    // Show all current patients
+    displayAllPatients(hospital);
+    
+    int patientId = getValidatedPatientId(hospital, "Enter patient ID to discharge", 0);
     dischargePatient(hospital, patientId);
 }
 
 void handleReleaseBed(Department* hospital) {
-    printf("\n========== RELEASE BED ==========\n");
-    int deptId = getValidatedIntInput("Enter department ID: ", 1, 5);
-    int wardNum = getValidatedIntInput("Enter ward number: ", 101, 501);
-    int bedNum = getValidatedIntInput("Enter bed number: ", 1, 10);
+    printHeader("RELEASE BED");
+    
+    displayDepartmentList();
+    int deptId = getValidatedIntInput("Enter department ID", 1, 5);
+    
+    displayWardListForDepartment(deptId);
+    int wardNum = getValidatedWardNumber(deptId);
+    
+    // FIXED: Removed deptId parameter from getValidatedBedNumber
+    int bedNum = getValidatedBedNumber(wardNum);
     
     Department* dept = hospital;
     while (dept != NULL) {
@@ -1413,25 +1748,35 @@ void handleReleaseBed(Department* hospital) {
             if (ward != NULL) {
                 Bed* bed = findBedInWard(ward, bedNum);
                 if (bed != NULL && bed->status == STATUS_OCCUPIED) {
-                    printf("\nBed %d — current patient: %s (ID: %d)\n", 
-                           bedNum, bed->patientName, bed->patientId);
+                    printf("\n" COLOR_YELLOW "Bed %d Information:" COLOR_RESET "\n", bedNum);
+                    printf("  Current patient: %s\n", bed->patientName);
+                    printf("  Patient ID: %d\n", bed->patientId);
+                    printSeparator();
+                    
                     char confirm;
-                    printf("Confirm bed release? (y/n): ");
+                    printf("\n" COLOR_YELLOW "Confirm bed release? (y/n): " COLOR_RESET);
                     scanf(" %c", &confirm);
+                    clearInputBuffer();
                     
                     if (confirm == 'y' || confirm == 'Y') {
                         vacateBed(bed);
                         ward->occupiedBeds--;
                         updateDepartmentStats(dept);
-                        printf("✓ Bed released successfully!\n");
+                        printSuccess("Bed released successfully!");
                         
-                        // FIXED: Save to database after release
-                        printf("\n  Saving to database...\n");
+                        printf("\n");
+                        printInfo("Saving to database...");
                         saveAllDataToDB(hospital);
+                    } else {
+                        printInfo("Bed release cancelled");
                     }
                 } else if (bed != NULL) {
-                    printf("Bed %d is already available\n", bedNum);
+                    printInfo("Bed is already available");
+                } else {
+                    printError("Bed not found");
                 }
+            } else {
+                printError("Ward not found");
             }
             break;
         }
@@ -1440,27 +1785,27 @@ void handleReleaseBed(Department* hospital) {
 }
 
 void handleBackupDatabase(Department* hospital) {
-    printf("\n========== MANUAL DATABASE BACKUP ==========\n");
+    printHeader("MANUAL DATABASE BACKUP");
     saveAllDataToDB(hospital);
-    printf("\n✓ Database backup completed!\n");
-    printf("  Files created:\n");
-    printf("  - %s\n", DB_DEPARTMENTS_FILE);
-    printf("  - %s\n", DB_WARDS_FILE);
-    printf("  - %s\n", DB_BEDS_FILE);
-    printf("  - %s\n", DB_PATIENTS_FILE);
+    printSuccess("Database backup completed!");
+    printf("  Files created/updated:\n");
+    printf("  " COLOR_CYAN "•" COLOR_RESET " %s\n", DB_DEPARTMENTS_FILE);
+    printf("  " COLOR_CYAN "•" COLOR_RESET " %s\n", DB_WARDS_FILE);
+    printf("  " COLOR_CYAN "•" COLOR_RESET " %s\n", DB_BEDS_FILE);
+    printf("  " COLOR_CYAN "•" COLOR_RESET " %s\n", DB_PATIENTS_FILE);
 }
 
 // ==================== Global Variable & Main Entry ====================
 static Department* g_hospital = NULL;
 
 void init_hospital_globals(void) {
-    printf("\n[Module D] Ward & Bed Management — Initializing...\n");
+    printf("\n" COLOR_CYAN "[Module D] Ward & Bed Management — Initializing..." COLOR_RESET "\n");
     
     // Try to load existing data from database
     if (!isDatabaseEmpty()) {
-        printf("Existing database found. Loading data...\n");
+        printInfo("Existing database found. Loading data...");
         if (loadAllDataFromDB(&g_hospital) == SUCCESS) {
-            printf("✓ Data loaded successfully from database!\n");
+            printSuccess("Data loaded successfully from database!");
             
             // Display loaded data summary
             int totalPatients = 0, totalBeds = 0;
@@ -1476,7 +1821,7 @@ void init_hospital_globals(void) {
     }
     
     // If no database exists or load failed, create new system
-    printf("No existing database found. Creating new system...\n");
+    printInfo("No existing database found. Creating new system...");
     g_hospital = initializeHospital();
     saveAllDataToDB(g_hospital);
 }
@@ -1488,11 +1833,11 @@ int D_entry(void) {
         init_hospital_globals();
     }
     
-    printf("\n[Module D] Ward & Bed Management — Ready\n");
+    printf("\n" COLOR_GREEN "[Module D] Ward & Bed Management — Ready" COLOR_RESET "\n");
     
     do {
         printMainMenu();
-        choice = getValidatedIntInput("Select: ", 0, 10);
+        choice = getValidatedIntInput("\n" COLOR_YELLOW "Select option" COLOR_RESET, 0, 10);
         
         switch(choice) {
             case 1: handleAdmitPatient(g_hospital);     break;
@@ -1506,12 +1851,13 @@ int D_entry(void) {
             case 9: performDataAnalysis(g_hospital);    break;
             case 10: handleBackupDatabase(g_hospital);  break;
             case 0:
-                printf("\nSaving data before exit...\n");
+                printf("\n");
+                printInfo("Saving data before exit...");
                 saveAllDataToDB(g_hospital);
-                printf("Exiting system...\n");
+                printSuccess("Exiting system...");
                 freeHospitalSystem(&g_hospital);
                 printMemoryReport();
-                printf("\nThank you for using Hospital Management System!\n");
+                printf("\n" COLOR_GREEN "Thank you for using Hospital Management System!\n" COLOR_RESET);
                 break;
         }
     } while(choice != 0);
@@ -1519,3 +1865,24 @@ int D_entry(void) {
     return 0;
 }
 
+void freeHospitalSystem(Department** hospital) {
+    if (hospital == NULL || *hospital == NULL) return;
+    
+    Department* current = *hospital;
+    while (current != NULL) {
+        Department* next = current->next;
+        freeDepartment(current);
+        current = next;
+    }
+    
+    *hospital = NULL;
+}
+
+void printMemoryReport(void) {
+    printf("\n" COLOR_BLUE "============================================================" COLOR_RESET "\n");
+    printf(COLOR_CYAN "MEMORY CLEANUP REPORT" COLOR_RESET "\n");
+    printf(COLOR_BLUE "============================================================" COLOR_RESET "\n");
+    printSuccess("All dynamically allocated memory released");
+    printSuccess("System resources cleaned up");
+    printf(COLOR_BLUE "============================================================" COLOR_RESET "\n");
+}
