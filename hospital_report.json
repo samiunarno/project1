@@ -1,0 +1,30 @@
+{
+  "reportType": "hospital_statistics",
+  "totalDepartments": 5,
+  "totalWards": 9,
+  "totalBeds": 70,
+  "totalPatients": 0,
+  "overallOccupancyRate": 0.00,
+  "departments": [
+    {
+      "name": "心血管内科",
+      "occupancyRate": 0.00
+    },
+    {
+      "name": "外科",
+      "occupancyRate": 0.00
+    },
+    {
+      "name": "儿科",
+      "occupancyRate": 0.00
+    },
+    {
+      "name": "骨科",
+      "occupancyRate": 0.00
+    },
+    {
+      "name": "急诊科",
+      "occupancyRate": 0.00
+    }
+  ]
+}

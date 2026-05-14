@@ -1,0 +1,9 @@
+1|101|Cardiology General Ward|10|1
+1|102|Cardiology ICU|5|0
+1|103|Cardiology Private Room|5|0
+2|201|Surgery General Ward|10|0
+2|202|Surgery Private Room|5|0
+3|301|Pediatrics General Ward|10|0
+3|302|Pediatrics Isolation Ward|5|0
+4|401|Orthopedics General Ward|10|0
+5|501|Emergency Observation|10|0

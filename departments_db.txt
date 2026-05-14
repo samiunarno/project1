@@ -1,0 +1,5 @@
+1|Cardiology|9|60|1
+2|Surgery|6|45|0
+3|Pediatrics|6|45|0
+4|Orthopedics|3|30|0
+5|Emergency|3|30|0
