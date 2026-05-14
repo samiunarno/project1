@@ -1,32 +1,32 @@
 ============================================================
-HOSPITAL STATISTICS REPORT
+医院统计报告
 ============================================================
 
-Report Date: Fri May 15 00:44:07 2026
+报告日期: Fri May 15 00:56:11 2026
 
 
-HOSPITAL OVERVIEW
+医院概览
 ------------------------------------------------------------
-Total Departments:       10
-Total Wards:             252
-Total Beds:              3228
-Total Patients:          56
-Overall Occupancy Rate:  1.7%
+科室总数:       10
+病房总数:       252
+床位总数:       3228
+患者总数:       56
+总体占用率:     1.7%
 
-DEPARTMENT BREAKDOWN
+科室细分
 ------------------------------------------------------------
-心内科: 1.3% occupancy rate
-普外科: 2.4% occupancy rate
-儿科: 2.9% occupancy rate
-骨科: 1.9% occupancy rate
-急诊科: 2.4% occupancy rate
-妇产科: 1.7% occupancy rate
-神经内科: 1.1% occupancy rate
-呼吸内科: 1.1% occupancy rate
-康复科: 1.3% occupancy rate
-传染科: 1.1% occupancy rate
+心内科: 1.3% 占用率
+普外科: 2.4% 占用率
+儿科: 2.9% 占用率
+骨科: 1.9% 占用率
+急诊科: 2.4% 占用率
+妇产科: 1.7% 占用率
+神经内科: 1.1% 占用率
+呼吸内科: 1.1% 占用率
+康复科: 1.3% 占用率
+传染科: 1.1% 占用率
 
-OCCUPANCY VISUAL (each # = 5%)
+占用率可视化 (每个 # = 5%)
 ------------------------------------------------------------
 心内科          1% |                    |
 普外科          2% |                    |
