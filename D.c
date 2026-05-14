@@ -10,8 +10,6 @@
 #define MAX_BEDS_PER_WARD 20
 #define SUCCESS 1
 #define FAILURE 0
-#define TRUE 1
-#define FALSE 0
 
 // 数据库文件名
 #define DB_DEPARTMENTS_FILE "departments_db.txt"
@@ -78,7 +76,8 @@ typedef struct PatientInfo {
     int bedNumber;
 } PatientInfo;
 
-// 函数声明
+// ==================== 前置声明 ====================
+
 Bed* createBed(int bedNumber);
 void initializeBed(Bed* bed, int bedNumber);
 void addBedToWard(Ward* ward, Bed* bed);
@@ -90,9 +89,7 @@ void freeBed(Bed* bed);
 
 Ward* createWard(int wardNumber, const char* wardName, int totalBeds);
 Bed* findBedInWard(const Ward* ward, int bedNumber);
-int getAvailableBedsInWard(const Ward* ward);
 float getWardOccupancyRate(const Ward* ward);
-void displayWardBeds(const Ward* ward);
 void displayWard(const Ward* ward);
 void freeWard(Ward* ward);
 
@@ -100,8 +97,8 @@ Department* createDepartment(int departmentId, const char* departmentName);
 void addWardToDepartment(Department* department, Ward* ward);
 Ward* findWardInDepartment(const Department* department, int wardNumber);
 void updateDepartmentStats(Department* department);
-void displayDepartment(const Department* department);
 void freeDepartment(Department* department);
+void displayDepartment(const Department* department);
 
 HospitalStatistics collectStatistics(Department* hospital);
 void exportStatisticsToFile(Department* hospital);
@@ -126,54 +123,45 @@ void printError(const char* message);
 void printInfo(const char* message);
 void printHeader(const char* title);
 void printSeparator(void);
-void displayDepartmentList(void);
-void displayWardListForDepartment(int deptId);
-void freeHospitalSystem(Department** hospital);
-void printMemoryReport(void);
 void printMainMenu(void);
-Department* initializeHospital(void);
-void performDataAnalysis(Department* hospital);
+
 void handleAdmitPatient(Department* hospital);
 void handleTransferPatient(Department* hospital);
 void handleDischargePatient(Department* hospital);
 void handleReleaseBed(Department* hospital);
+void performDataAnalysis(Department* hospital);
+
 void init_hospital_globals(void);
 int D_entry(void);
+void freeHospitalSystem(Department** hospital);
+void printMemoryReport(void);
 
-// 数据库函数 - 实时读写
-int saveDepartmentsToDB(Department* hospital);
-int saveWardsToDB(Department* hospital);
-int saveBedsToDB(Department* hospital);
-int savePatientsToDB(Department* hospital);
-int loadDepartmentsFromDB(Department** hospital);
-int loadWardsFromDB(Department* hospital);
-int loadBedsFromDB(Department* hospital);
-int loadPatientsFromDB(Department* hospital);
+// 数据库实时读写
 int saveAllDataToDB(Department* hospital);
 int loadAllDataFromDB(Department** hospital);
-int isDatabaseEmpty(void);
-void createBackup(void);
 int checkDatabaseIntegrity(void);
 void printDatabaseSummary(Department* hospital);
 
-// ==================== 辅助函数 ====================
+// 动态展示（无mock）
+void displayDepartmentList(void);
+void displayWardListForDepartment(int deptId);
+int getMaxBedNumberInWard(Department* hospital, int deptId, int wardNum);
+
+// ==================== 全局状态 ====================
+static Department* g_hospital = NULL;
+
+// ==================== 辅助输出 ====================
 
 void clearInputBuffer(void) {
     int c;
-    while ((c = getchar()) != '\n' && c != EOF);
+    while ((c = getchar()) != '\n' && c != EOF) {
+        // discard
+    }
 }
 
-void printSuccess(const char* message) {
-    printf("[成功] %s\n", message);
-}
-
-void printError(const char* message) {
-    printf("[错误] %s\n", message);
-}
-
-void printInfo(const char* message) {
-    printf("[信息] %s\n", message);
-}
+void printSuccess(const char* message) { printf("[成功] %s\n", message); }
+void printError(const char* message) { printf("[错误] %s\n", message); }
+void printInfo(const char* message) { printf("[信息] %s\n", message); }
 
 void printHeader(const char* title) {
     printf("\n============================================================\n");
@@ -185,121 +173,329 @@ void printSeparator(void) {
     printf("------------------------------------------------------------\n");
 }
 
+int getValidatedIntInput(const char* prompt, int min, int max) {
+    int value = 0;
+    char buf[128];
+
+    while (1) {
+        printf("%s [%d-%d]: ", prompt, min, max);
+        if (!fgets(buf, sizeof(buf), stdin)) {
+            continue;
+        }
+        if (sscanf(buf, "%d", &value) != 1) {
+            printf("[错误] 无效输入！请输入数字。\n");
+            continue;
+        }
+        if (value < min || value > max) {
+            printf("[错误] 输入超出范围！请输入 %d-%d。\n", min, max);
+            continue;
+        }
+        return value;
+    }
+}
+
+// ==================== 结构体内存 ====================
+
+Bed* createBed(int bedNumber) {
+    Bed* bed = (Bed*)malloc(sizeof(Bed));
+    if (!bed) {
+        printError("床位内存分配失败");
+        return NULL;
+    }
+    initializeBed(bed, bedNumber);
+    return bed;
+}
+
+void initializeBed(Bed* bed, int bedNumber) {
+    bed->bedNumber = bedNumber;
+    bed->status = STATUS_AVAILABLE;
+    bed->patientId = -1;
+    bed->patientName[0] = '\0';
+    bed->next = NULL;
+}
+
+void addBedToWard(Ward* ward, Bed* bed) {
+    if (!ward || !bed) return;
+
+    if (!ward->bedList) {
+        ward->bedList = bed;
+        return;
+    }
+    Bed* cur = ward->bedList;
+    while (cur->next) cur = cur->next;
+    cur->next = bed;
+}
+
+void occupyBed(Bed* bed, int patientId, const char* patientName) {
+    if (!bed) return;
+    bed->status = STATUS_OCCUPIED;
+    bed->patientId = patientId;
+    strncpy(bed->patientName, patientName ? patientName : "", MAX_NAME_LENGTH - 1);
+    bed->patientName[MAX_NAME_LENGTH - 1] = '\0';
+}
+
+void vacateBed(Bed* bed) {
+    if (!bed) return;
+    bed->status = STATUS_AVAILABLE;
+    bed->patientId = -1;
+    bed->patientName[0] = '\0';
+}
+
+int isBedAvailable(const Bed* bed) {
+    return bed && bed->status == STATUS_AVAILABLE;
+}
+
+void displayBed(const Bed* bed) {
+    if (!bed) return;
+    if (bed->status == STATUS_OCCUPIED) {
+        printf("  床位 %2d: [已占用] 患者: %s (ID: %d)\n", bed->bedNumber, bed->patientName, bed->patientId);
+    } else {
+        printf("  床位 %2d: [可用]\n", bed->bedNumber);
+    }
+}
+
+void freeBed(Bed* bed) {
+    if (bed) free(bed);
+}
+
+// ==================== 病房 ====================
+
+Ward* createWard(int wardNumber, const char* wardName, int totalBeds) {
+    Ward* ward = (Ward*)malloc(sizeof(Ward));
+    if (!ward) {
+        printError("病房内存分配失败");
+        return NULL;
+    }
+
+    ward->wardNumber = wardNumber;
+    strncpy(ward->wardName, wardName ? wardName : "", MAX_NAME_LENGTH - 1);
+    ward->wardName[MAX_NAME_LENGTH - 1] = '\0';
+
+    ward->totalBeds = totalBeds;
+    ward->occupiedBeds = 0;
+    ward->bedList = NULL;
+    ward->next = NULL;
+
+    for (int i = 1; i <= totalBeds; i++) {
+        addBedToWard(ward, createBed(i));
+    }
+    return ward;
+}
+
+Bed* findBedInWard(const Ward* ward, int bedNumber) {
+    if (!ward) return NULL;
+    Bed* cur = ward->bedList;
+    while (cur) {
+        if (cur->bedNumber == bedNumber) return cur;
+        cur = cur->next;
+    }
+    return NULL;
+}
+
+float getWardOccupancyRate(const Ward* ward) {
+    if (!ward || ward->totalBeds == 0) return 0.0f;
+    return (float)ward->occupiedBeds / (float)ward->totalBeds * 100.0f;
+}
+
+void displayWard(const Ward* ward) {
+    if (!ward) return;
+
+    printf("\n============================================================\n");
+    printf("病房 %d: %s\n", ward->wardNumber, ward->wardName);
+    printf("占用率: %d/%d 张床 (%.1f%%)\n",
+           ward->occupiedBeds, ward->totalBeds, getWardOccupancyRate(ward));
+    printf("------------------------------------------------------------\n");
+
+    Bed* cur = ward->bedList;
+    while (cur) {
+        displayBed(cur);
+        cur = cur->next;
+    }
+
+    printf("============================================================\n");
+}
+
+void freeWard(Ward* ward) {
+    if (!ward) return;
+    Bed* cur = ward->bedList;
+    while (cur) {
+        Bed* next = cur->next;
+        freeBed(cur);
+        cur = next;
+    }
+    free(ward);
+}
+
+// ==================== 科室 ====================
+
+Department* createDepartment(int departmentId, const char* departmentName) {
+    Department* dept = (Department*)malloc(sizeof(Department));
+    if (!dept) {
+        printError("科室内存分配失败");
+        return NULL;
+    }
+
+    dept->departmentId = departmentId;
+    strncpy(dept->departmentName, departmentName ? departmentName : "", MAX_NAME_LENGTH - 1);
+    dept->departmentName[MAX_NAME_LENGTH - 1] = '\0';
+
+    dept->totalWards = 0;
+    dept->totalBeds = 0;
+    dept->totalPatients = 0;
+    dept->wardList = NULL;
+    dept->next = NULL;
+
+    return dept;
+}
+
+void addWardToDepartment(Department* department, Ward* ward) {
+    if (!department || !ward) return;
+
+    if (!department->wardList) {
+        department->wardList = ward;
+    } else {
+        Ward* cur = department->wardList;
+        while (cur->next) cur = cur->next;
+        cur->next = ward;
+    }
+
+    department->totalWards++;
+    department->totalBeds += ward->totalBeds;
+    updateDepartmentStats(department);
+}
+
+Ward* findWardInDepartment(const Department* department, int wardNumber) {
+    if (!department) return NULL;
+    Ward* cur = department->wardList;
+    while (cur) {
+        if (cur->wardNumber == wardNumber) return cur;
+        cur = cur->next;
+    }
+    return NULL;
+}
+
+void updateDepartmentStats(Department* department) {
+    if (!department) return;
+
+    department->totalPatients = 0;
+    Ward* cur = department->wardList;
+    while (cur) {
+        department->totalPatients += cur->occupiedBeds;
+        cur = cur->next;
+    }
+}
+
+void displayDepartment(const Department* department) {
+    if (!department) return;
+
+    printf("\n============================================================\n");
+    printf("科室: %s (ID: %d)\n", department->departmentName, department->departmentId);
+    printf("统计: %d 名患者 | %d 张床 | %d 个病房\n",
+           department->totalPatients, department->totalBeds, department->totalWards);
+    printf("============================================================\n");
+
+    Ward* cur = department->wardList;
+    while (cur) {
+        displayWard(cur);
+        cur = cur->next;
+    }
+}
+
+void freeDepartment(Department* department) {
+    if (!department) return;
+    Ward* cur = department->wardList;
+    while (cur) {
+        Ward* next = cur->next;
+        freeWard(cur);
+        cur = next;
+    }
+    free(department);
+}
+
+// ==================== 动态展示（无mock） ====================
+
 void displayDepartmentList(void) {
     printf("\n可用科室列表:\n");
     printf("------------------------------------------------------------\n");
     printf("ID | 科室名称            | 病房数   | 床位数\n");
     printf("------------------------------------------------------------\n");
-    printf("1  | 心内科              | 3 个病房 | 20 张床\n");
-    printf("2  | 外科                | 2 个病房 | 15 张床\n");
-    printf("3  | 儿科                | 2 个病房 | 15 张床\n");
-    printf("4  | 骨科                | 1 个病房 | 10 张床\n");
-    printf("5  | 急诊科              | 1 个病房 | 15 张床\n");
+
+    if (g_hospital == NULL) {
+        printf("(未加载医院数据)\n");
+        printf("------------------------------------------------------------\n");
+        return;
+    }
+
+    Department* dept = g_hospital;
+    while (dept) {
+        printf("%-3d| %-20s | %-7d | %-7d\n",
+               dept->departmentId,
+               dept->departmentName,
+               dept->totalWards,
+               dept->totalBeds);
+        dept = dept->next;
+    }
     printf("------------------------------------------------------------\n");
 }
 
 void displayWardListForDepartment(int deptId) {
     printf("\n可用病房列表:\n");
     printf("------------------------------------------------------------\n");
-    switch(deptId) {
-        case 1:
-            printf("101 | 心内科普通病房      | 10 张床\n");
-            printf("102 | 心内科重症监护室    | 5 张床\n");
-            printf("103 | 心内科私人病房      | 5 张床\n");
-            break;
-        case 2:
-            printf("201 | 外科普通病房        | 10 张床\n");
-            printf("202 | 外科私人病房        | 5 张床\n");
-            break;
-        case 3:
-            printf("301 | 儿科普通病房        | 10 张床\n");
-            printf("302 | 儿科隔离病房        | 5 张床\n");
-            break;
-        case 4:
-            printf("401 | 骨科普通病房        | 10 张床\n");
-            break;
-        case 5:
-            printf("501 | 急诊观察室          | 10 张床\n");
-            break;
+    printf("病房ID | 病房名称                 | 总床位\n");
+    printf("------------------------------------------------------------\n");
+
+    if (g_hospital == NULL) {
+        printf("(未加载医院数据)\n");
+        printf("------------------------------------------------------------\n");
+        return;
     }
+
+    Department* dept = g_hospital;
+    while (dept) {
+        if (dept->departmentId == deptId) {
+            Ward* w = dept->wardList;
+            if (!w) {
+                printf("该科室下无病房\n");
+            }
+            while (w) {
+                printf("%-6d | %-24s | %-6d\n", w->wardNumber, w->wardName, w->totalBeds);
+                w = w->next;
+            }
+            printf("------------------------------------------------------------\n");
+            return;
+        }
+        dept = dept->next;
+    }
+
+    printf("未找到该科室（ID=%d）\n", deptId);
     printf("------------------------------------------------------------\n");
 }
 
-int getValidatedIntInput(const char* prompt, int min, int max) {
-    int value;
-    int valid;
-    char input[100];
-
-    do {
-        printf("%s [%d-%d]: ", prompt, min, max);
-
-        if (fgets(input, sizeof(input), stdin) != NULL) {
-            if (sscanf(input, "%d", &value) == 1) {
-                if (value >= min && value <= max) {
-                    valid = 1;
-                } else {
-                    printf("[错误] 输入超出范围！请输入 %d-%d。\n", min, max);
-                    valid = 0;
-                }
-            } else {
-                printf("[错误] 无效输入！请输入数字。\n");
-                valid = 0;
-            }
-        } else {
-            valid = 0;
+int getMaxBedNumberInWard(Department* hospital, int deptId, int wardNum) {
+    if (!hospital) return 0;
+    Department* d = hospital;
+    while (d) {
+        if (d->departmentId == deptId) {
+            Ward* w = findWardInDepartment(d, wardNum);
+            if (!w) return 0;
+            return w->totalBeds; // 床位号是从 1..totalBeds
         }
-    } while (!valid);
-
-    return value;
+        d = d->next;
+    }
+    return 0;
 }
 
-// ==================== 数据库完整性检查 ====================
-int checkDatabaseIntegrity(void) {
-    FILE* file = fopen(DB_DEPARTMENTS_FILE, "r");
-    if (file == NULL) return 0;
-    
-    char line[100];
-    int count = 0;
-    while (fgets(line, sizeof(line), file)) {
-        if (strlen(line) > 5) count++;
-    }
-    fclose(file);
-    
-    return (count > 0);
-}
-
-void printDatabaseSummary(Department* hospital) {
-    if (hospital == NULL) {
-        printf("数据库为空\n");
-        return;
-    }
-    
-    int deptCount = 0, wardCount = 0, bedCount = 0, patientCount = 0;
-    Department* dept = hospital;
-    while (dept) {
-        deptCount++;
-        wardCount += dept->totalWards;
-        bedCount += dept->totalBeds;
-        patientCount += dept->totalPatients;
-        dept = dept->next;
-    }
-    
-    printf("\n当前数据库状态:\n");
-    printf("  科室: %d | 病房: %d | 床位: %d | 患者: %d\n", 
-           deptCount, wardCount, bedCount, patientCount);
-}
-
-// ==================== 实时数据库函数 ====================
+// ==================== 数据库：保存 ====================
 
 int saveDepartmentsToDB(Department* hospital) {
     FILE* file = fopen(DB_DEPARTMENTS_FILE, "w");
-    if (file == NULL) {
+    if (!file) {
         printError("无法打开科室数据库文件");
         return FAILURE;
     }
 
     Department* dept = hospital;
-    while (dept != NULL) {
+    while (dept) {
         fprintf(file, "%d|%s|%d|%d|%d\n",
                 dept->departmentId,
                 dept->departmentName,
@@ -315,22 +511,22 @@ int saveDepartmentsToDB(Department* hospital) {
 
 int saveWardsToDB(Department* hospital) {
     FILE* file = fopen(DB_WARDS_FILE, "w");
-    if (file == NULL) {
+    if (!file) {
         printError("无法打开病房数据库文件");
         return FAILURE;
     }
 
     Department* dept = hospital;
-    while (dept != NULL) {
-        Ward* ward = dept->wardList;
-        while (ward != NULL) {
+    while (dept) {
+        Ward* w = dept->wardList;
+        while (w) {
             fprintf(file, "%d|%d|%s|%d|%d\n",
                     dept->departmentId,
-                    ward->wardNumber,
-                    ward->wardName,
-                    ward->totalBeds,
-                    ward->occupiedBeds);
-            ward = ward->next;
+                    w->wardNumber,
+                    w->wardName,
+                    w->totalBeds,
+                    w->occupiedBeds);
+            w = w->next;
         }
         dept = dept->next;
     }
@@ -341,27 +537,27 @@ int saveWardsToDB(Department* hospital) {
 
 int saveBedsToDB(Department* hospital) {
     FILE* file = fopen(DB_BEDS_FILE, "w");
-    if (file == NULL) {
+    if (!file) {
         printError("无法打开床位数据库文件");
         return FAILURE;
     }
 
     Department* dept = hospital;
-    while (dept != NULL) {
-        Ward* ward = dept->wardList;
-        while (ward != NULL) {
-            Bed* bed = ward->bedList;
-            while (bed != NULL) {
+    while (dept) {
+        Ward* w = dept->wardList;
+        while (w) {
+            Bed* bed = w->bedList;
+            while (bed) {
                 fprintf(file, "%d|%d|%d|%d|%d|%s\n",
                         dept->departmentId,
-                        ward->wardNumber,
+                        w->wardNumber,
                         bed->bedNumber,
-                        bed->status,
+                        (int)bed->status,
                         bed->patientId,
                         bed->patientName);
                 bed = bed->next;
             }
-            ward = ward->next;
+            w = w->next;
         }
         dept = dept->next;
     }
@@ -372,28 +568,28 @@ int saveBedsToDB(Department* hospital) {
 
 int savePatientsToDB(Department* hospital) {
     FILE* file = fopen(DB_PATIENTS_FILE, "w");
-    if (file == NULL) {
+    if (!file) {
         printError("无法打开患者数据库文件");
         return FAILURE;
     }
 
     Department* dept = hospital;
-    while (dept != NULL) {
-        Ward* ward = dept->wardList;
-        while (ward != NULL) {
-            Bed* bed = ward->bedList;
-            while (bed != NULL) {
+    while (dept) {
+        Ward* w = dept->wardList;
+        while (w) {
+            Bed* bed = w->bedList;
+            while (bed) {
                 if (bed->status == STATUS_OCCUPIED) {
                     fprintf(file, "%d|%s|%d|%d|%d\n",
                             bed->patientId,
                             bed->patientName,
                             dept->departmentId,
-                            ward->wardNumber,
+                            w->wardNumber,
                             bed->bedNumber);
                 }
                 bed = bed->next;
             }
-            ward = ward->next;
+            w = w->next;
         }
         dept = dept->next;
     }
@@ -412,11 +608,30 @@ int saveAllDataToDB(Department* hospital) {
     return SUCCESS;
 }
 
+// ==================== 数据库：加载 ====================
+
+int checkDatabaseIntegrity(void) {
+    FILE* f;
+    f = fopen(DB_DEPARTMENTS_FILE, "r");
+    if (!f) return 0;
+
+    fclose(f);
+
+    // 仅检查存在性与非空（更严格校验可后续加）
+    f = fopen(DB_DEPARTMENTS_FILE, "r");
+    char line[256];
+    int count = 0;
+    while (fgets(line, sizeof(line), f)) {
+        if (strlen(line) > 1) count++;
+    }
+    fclose(f);
+
+    return count > 0;
+}
+
 int loadDepartmentsFromDB(Department** hospital) {
     FILE* file = fopen(DB_DEPARTMENTS_FILE, "r");
-    if (file == NULL) {
-        return FAILURE;
-    }
+    if (!file) return FAILURE;
 
     char line[512];
     Department* tail = NULL;
@@ -425,8 +640,9 @@ int loadDepartmentsFromDB(Department** hospital) {
         int deptId, totalWards, totalBeds, totalPatients;
         char deptName[MAX_NAME_LENGTH];
 
-        sscanf(line, "%d|%[^|]|%d|%d|%d",
-               &deptId, deptName, &totalWards, &totalBeds, &totalPatients);
+        if (sscanf(line, "%d|%99[^|]|%d|%d|%d", &deptId, deptName, &totalWards, &totalBeds, &totalPatients) != 5) {
+            continue;
+        }
 
         Department* dept = createDepartment(deptId, deptName);
         dept->totalWards = totalWards;
@@ -448,9 +664,7 @@ int loadDepartmentsFromDB(Department** hospital) {
 
 int loadWardsFromDB(Department* hospital) {
     FILE* file = fopen(DB_WARDS_FILE, "r");
-    if (file == NULL) {
-        return FAILURE;
-    }
+    if (!file) return FAILURE;
 
     char line[512];
 
@@ -458,18 +672,21 @@ int loadWardsFromDB(Department* hospital) {
         int deptId, wardNumber, totalBeds, occupiedBeds;
         char wardName[MAX_NAME_LENGTH];
 
-        sscanf(line, "%d|%d|%[^|]|%d|%d",
-               &deptId, &wardNumber, wardName, &totalBeds, &occupiedBeds);
+        if (sscanf(line, "%d|%d|%99[^|]|%d|%d", &deptId, &wardNumber, wardName, &totalBeds, &occupiedBeds) != 5) {
+            continue;
+        }
 
-        Department* dept = hospital;
-        while (dept != NULL) {
-            if (dept->departmentId == deptId) {
-                Ward* ward = createWard(wardNumber, wardName, totalBeds);
-                ward->occupiedBeds = occupiedBeds;
-                addWardToDepartment(dept, ward);
+        Department* d = hospital;
+        while (d) {
+            if (d->departmentId == deptId) {
+                Ward* w = createWard(wardNumber, wardName, totalBeds);
+                if (w) {
+                    w->occupiedBeds = occupiedBeds;
+                    addWardToDepartment(d, w);
+                }
                 break;
             }
-            dept = dept->next;
+            d = d->next;
         }
     }
 
@@ -479,36 +696,38 @@ int loadWardsFromDB(Department* hospital) {
 
 int loadBedsFromDB(Department* hospital) {
     FILE* file = fopen(DB_BEDS_FILE, "r");
-    if (file == NULL) {
-        return FAILURE;
-    }
+    if (!file) return FAILURE;
 
     char line[512];
 
     while (fgets(line, sizeof(line), file)) {
         int deptId, wardNumber, bedNumber, status, patientId;
         char patientName[MAX_NAME_LENGTH];
+        patientName[0] = '\0';
 
-        sscanf(line, "%d|%d|%d|%d|%d|%[^\n]",
-               &deptId, &wardNumber, &bedNumber, &status, &patientId, patientName);
+        // beds_db.txt: deptId|wardNumber|bedNumber|status|patientId|patientName
+        if (sscanf(line, "%d|%d|%d|%d|%d|%99[^\n]", &deptId, &wardNumber, &bedNumber, &status, &patientId, patientName) < 5) {
+            continue;
+        }
 
-        Department* dept = hospital;
-        while (dept != NULL) {
-            if (dept->departmentId == deptId) {
-                Ward* ward = findWardInDepartment(dept, wardNumber);
-                if (ward != NULL) {
-                    Bed* bed = findBedInWard(ward, bedNumber);
-                    if (bed != NULL) {
-                        bed->status = status;
-                        if (status == STATUS_OCCUPIED) {
+        Department* d = hospital;
+        while (d) {
+            if (d->departmentId == deptId) {
+                Ward* w = findWardInDepartment(d, wardNumber);
+                if (w) {
+                    Bed* bed = findBedInWard(w, bedNumber);
+                    if (bed) {
+                        bed->status = (status == STATUS_OCCUPIED) ? STATUS_OCCUPIED : STATUS_AVAILABLE;
+                        if (bed->status == STATUS_OCCUPIED) {
                             bed->patientId = patientId;
-                            strcpy(bed->patientName, patientName);
+                            strncpy(bed->patientName, patientName, MAX_NAME_LENGTH - 1);
+                            bed->patientName[MAX_NAME_LENGTH - 1] = '\0';
                         }
                     }
                 }
                 break;
             }
-            dept = dept->next;
+            d = d->next;
         }
     }
 
@@ -518,434 +737,158 @@ int loadBedsFromDB(Department* hospital) {
 
 int loadPatientsFromDB(Department* hospital) {
     FILE* file = fopen(DB_PATIENTS_FILE, "r");
-    if (file == NULL) {
-        return FAILURE;
-    }
+    if (!file) return FAILURE;
 
     char line[512];
 
     while (fgets(line, sizeof(line), file)) {
         int patientId, deptId, wardNumber, bedNumber;
         char patientName[MAX_NAME_LENGTH];
+        patientName[0] = '\0';
 
-        sscanf(line, "%d|%[^|]|%d|%d|%d",
-               &patientId, patientName, &deptId, &wardNumber, &bedNumber);
+        if (sscanf(line, "%d|%99[^|]|%d|%d|%d", &patientId, patientName, &deptId, &wardNumber, &bedNumber) != 5) {
+            continue;
+        }
 
-        Department* dept = hospital;
-        while (dept != NULL) {
-            if (dept->departmentId == deptId) {
-                Ward* ward = findWardInDepartment(dept, wardNumber);
-                if (ward != NULL) {
-                    Bed* bed = findBedInWard(ward, bedNumber);
-                    if (bed != NULL && bed->status == STATUS_AVAILABLE) {
+        Department* d = hospital;
+        while (d) {
+            if (d->departmentId == deptId) {
+                Ward* w = findWardInDepartment(d, wardNumber);
+                if (w) {
+                    Bed* bed = findBedInWard(w, bedNumber);
+                    if (bed && bed->status == STATUS_AVAILABLE) {
                         occupyBed(bed, patientId, patientName);
-                        ward->occupiedBeds++;
+                        w->occupiedBeds++;
                     }
                 }
                 break;
             }
-            dept = dept->next;
+            d = d->next;
         }
     }
 
     fclose(file);
-    updateDepartmentStats(hospital);
+
+    // 最终重新统计每个科室患者数
+    Department* d = hospital;
+    while (d) {
+        updateDepartmentStats(d);
+        d = d->next;
+    }
+
     return SUCCESS;
 }
 
 int loadAllDataFromDB(Department** hospital) {
-    // Always free and fully rebuild in-memory hospital from DB to avoid
-    // duplicated wards/beds across multiple loads/generations.
-    if (hospital == NULL) return FAILURE;
+    if (!hospital) return FAILURE;
 
-    if (*hospital != NULL) {
-        freeHospitalSystem(hospital);
+    if (*hospital) {
+        // free existing
+        Department* cur = *hospital;
+        while (cur) {
+            Department* next = cur->next;
+            freeDepartment(cur);
+            cur = next;
+        }
+        *hospital = NULL;
     }
 
-    if (loadDepartmentsFromDB(hospital) == FAILURE) {
-        return FAILURE;
-    }
+    if (loadDepartmentsFromDB(hospital) == FAILURE) return FAILURE;
+    if (*hospital == NULL) return FAILURE;
 
-    if (*hospital == NULL) {
-        return FAILURE;
-    }
-
-    // loadWardsFromDB() currently appends wards via addWardToDepartment(), which
-    // also increments department totals. Since we will recompute totals at the end,
-    // reset totals and let addWardToDepartment() manage them once.
-    // (The earlier bug you saw happens when totals/lists are not reset before loading.)
-
-    // Ensure department totals start from 0 (wardList should be empty after createDepartment).
-    Department* dept = *hospital;
-    while (dept != NULL) {
-        dept->totalWards = 0;
-        dept->totalBeds = 0;
-        dept->totalPatients = 0;
-        // wardList is already NULL at createDepartment, but keep it explicit.
-        dept->wardList = NULL;
-        dept = dept->next;
-    }
-
+    // 建议在加载前清空 totals/wardList（createDepartment已是空）
     loadWardsFromDB(*hospital);
     loadBedsFromDB(*hospital);
     loadPatientsFromDB(*hospital);
 
-    // Finally recompute totals from the loaded ward/bed structures.
-    dept = *hospital;
-    while (dept != NULL) {
-        updateDepartmentStats(dept);
-
-        // recompute totalWards/totalBeds from wardList
+    // 重算 totalWards/totalBeds/totalPatients，避免中间链式添加带来的累计误差
+    Department* d = *hospital;
+    while (d) {
         int wCount = 0;
         int bCount = 0;
-        Ward* w = dept->wardList;
-        while (w != NULL) {
+        d->totalPatients = 0;
+        Ward* w = d->wardList;
+        while (w) {
             wCount++;
             bCount += w->totalBeds;
+            d->totalPatients += w->occupiedBeds;
             w = w->next;
         }
-        dept->totalWards = wCount;
-        dept->totalBeds = bCount;
-
-        dept = dept->next;
+        d->totalWards = wCount;
+        d->totalBeds = bCount;
+        d = d->next;
     }
 
     return SUCCESS;
 }
 
-int isDatabaseEmpty(void) {
-    FILE* file = fopen(DB_DEPARTMENTS_FILE, "r");
-    if (file == NULL) return 1;
-    
-    // চেক করুন ফাইলে কোনো ডাটা আছে কিনা
-    fseek(file, 0, SEEK_END);
-    long size = ftell(file);
-    fclose(file);
-    
-    return (size <= 10);  // যদি ফাইলের সাইজ খুব ছোট হয় তাহলে খালি
-}
-
-void createBackup(void) {
-    char backupName[100];
-    time_t now = time(NULL);
-    struct tm* t = localtime(&now);
-
-    sprintf(backupName, "backup_%04d%02d%02d_%02d%02d%02d.txt",
-            t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-            t->tm_hour, t->tm_min, t->tm_sec);
-
-    FILE* backup = fopen(backupName, "w");
-    if (backup == NULL) return;
-
-    fprintf(backup, "医院管理系统备份\n");
-    fprintf(backup, "备份日期: %s", ctime(&now));
-    fprintf(backup, "====================================\n\n");
-
-    const char* dbFiles[] = {DB_DEPARTMENTS_FILE, DB_WARDS_FILE, DB_BEDS_FILE, DB_PATIENTS_FILE};
-
-    for (int i = 0; i < 4; i++) {
-        FILE* src = fopen(dbFiles[i], "r");
-        if (src != NULL) {
-            fprintf(backup, "\n--- %s 的内容 ---\n", dbFiles[i]);
-            char ch;
-            while ((ch = fgetc(src)) != EOF) {
-                fputc(ch, backup);
-            }
-            fclose(src);
-        }
+void printDatabaseSummary(Department* hospital) {
+    if (!hospital) {
+        printf("数据库为空\n");
+        return;
     }
 
-    fclose(backup);
-    printSuccess("备份已创建");
-}
-
-// ==================== 床位函数 ====================
-Bed* createBed(int bedNumber) {
-    Bed* bed = (Bed*)malloc(sizeof(Bed));
-    if (bed == NULL) {
-        printError("床位内存分配失败");
-        return NULL;
-    }
-    initializeBed(bed, bedNumber);
-    return bed;
-}
-
-void initializeBed(Bed* bed, int bedNumber) {
-    bed->bedNumber = bedNumber;
-    bed->status = STATUS_AVAILABLE;
-    bed->patientId = -1;
-    strcpy(bed->patientName, "");
-    bed->next = NULL;
-}
-
-void occupyBed(Bed* bed, int patientId, const char* patientName) {
-    if (bed == NULL) return;
-    bed->status = STATUS_OCCUPIED;
-    bed->patientId = patientId;
-    strcpy(bed->patientName, patientName);
-}
-
-void vacateBed(Bed* bed) {
-    if (bed == NULL) return;
-    bed->status = STATUS_AVAILABLE;
-    bed->patientId = -1;
-    strcpy(bed->patientName, "");
-}
-
-int isBedAvailable(const Bed* bed) {
-    return bed != NULL && bed->status == STATUS_AVAILABLE;
-}
-
-void displayBed(const Bed* bed) {
-    if (bed == NULL) return;
-
-    if (bed->status == STATUS_OCCUPIED) {
-        printf("  床位 %2d: [已占用] 患者: %s (ID: %d)\n",
-               bed->bedNumber, bed->patientName, bed->patientId);
-    } else {
-        printf("  床位 %2d: [可用]\n", bed->bedNumber);
-    }
-}
-
-void freeBed(Bed* bed) {
-    if (bed != NULL) {
-        free(bed);
-    }
-}
-
-// ==================== 病房函数 ====================
-Ward* createWard(int wardNumber, const char* wardName, int totalBeds) {
-    Ward* ward = (Ward*)malloc(sizeof(Ward));
-    if (ward == NULL) {
-        printError("病房内存分配失败");
-        return NULL;
+    int deptCount = 0, wardCount = 0, bedCount = 0, patientCount = 0;
+    Department* d = hospital;
+    while (d) {
+        deptCount++;
+        wardCount += d->totalWards;
+        bedCount += d->totalBeds;
+        patientCount += d->totalPatients;
+        d = d->next;
     }
 
-    ward->wardNumber = wardNumber;
-    strcpy(ward->wardName, wardName);
-    ward->totalBeds = totalBeds;
-    ward->occupiedBeds = 0;
-    ward->bedList = NULL;
-    ward->next = NULL;
-
-    for (int i = 1; i <= totalBeds; i++) {
-        Bed* bed = createBed(i);
-        addBedToWard(ward, bed);
-    }
-
-    return ward;
+    printf("\n当前数据库状态:\n");
+    printf("  科室: %d | 病房: %d | 床位: %d | 患者: %d\n", deptCount, wardCount, bedCount, patientCount);
 }
 
-void addBedToWard(Ward* ward, Bed* bed) {
-    if (ward == NULL || bed == NULL) return;
+// ==================== 报告/分析 ====================
 
-    if (ward->bedList == NULL) {
-        ward->bedList = bed;
-    } else {
-        Bed* current = ward->bedList;
-        while (current->next != NULL) {
-            current = current->next;
-        }
-        current->next = bed;
-    }
-}
-
-Bed* findBedInWard(const Ward* ward, int bedNumber) {
-    if (ward == NULL) return NULL;
-
-    Bed* current = ward->bedList;
-    while (current != NULL) {
-        if (current->bedNumber == bedNumber) {
-            return current;
-        }
-        current = current->next;
-    }
-    return NULL;
-}
-
-int getAvailableBedsInWard(const Ward* ward) {
-    if (ward == NULL) return 0;
-    return ward->totalBeds - ward->occupiedBeds;
-}
-
-float getWardOccupancyRate(const Ward* ward) {
-    if (ward == NULL || ward->totalBeds == 0) return 0.0f;
-    return (float)ward->occupiedBeds / ward->totalBeds * 100;
-}
-
-void displayWardBeds(const Ward* ward) {
-    if (ward == NULL) return;
-
-    Bed* current = ward->bedList;
-    while (current != NULL) {
-        displayBed(current);
-        current = current->next;
-    }
-}
-
-void displayWard(const Ward* ward) {
-    if (ward == NULL) return;
-
-    printf("\n============================================================\n");
-    printf("病房 %d: %s\n", ward->wardNumber, ward->wardName);
-    printf("占用率: %d/%d 张床 (%.1f%%)\n",
-           ward->occupiedBeds, ward->totalBeds, getWardOccupancyRate(ward));
-    printf("------------------------------------------------------------\n");
-    displayWardBeds(ward);
-    printf("============================================================\n");
-}
-
-void freeWard(Ward* ward) {
-    if (ward == NULL) return;
-
-    Bed* current = ward->bedList;
-    while (current != NULL) {
-        Bed* next = current->next;
-        freeBed(current);
-        current = next;
-    }
-
-    free(ward);
-}
-
-// ==================== 科室函数 ====================
-Department* createDepartment(int departmentId, const char* departmentName) {
-    Department* department = (Department*)malloc(sizeof(Department));
-    if (department == NULL) {
-        printError("科室内存分配失败");
-        return NULL;
-    }
-
-    department->departmentId = departmentId;
-    strcpy(department->departmentName, departmentName);
-    department->totalWards = 0;
-    department->totalBeds = 0;
-    department->totalPatients = 0;
-    department->wardList = NULL;
-    department->next = NULL;
-
-    return department;
-}
-
-void addWardToDepartment(Department* department, Ward* ward) {
-    if (department == NULL || ward == NULL) return;
-
-    if (department->wardList == NULL) {
-        department->wardList = ward;
-    } else {
-        Ward* current = department->wardList;
-        while (current->next != NULL) {
-            current = current->next;
-        }
-        current->next = ward;
-    }
-
-    department->totalWards++;
-    department->totalBeds += ward->totalBeds;
-    updateDepartmentStats(department);
-}
-
-Ward* findWardInDepartment(const Department* department, int wardNumber) {
-    if (department == NULL) return NULL;
-
-    Ward* current = department->wardList;
-    while (current != NULL) {
-        if (current->wardNumber == wardNumber) {
-            return current;
-        }
-        current = current->next;
-    }
-    return NULL;
-}
-
-void updateDepartmentStats(Department* department) {
-    if (department == NULL) return;
-
-    department->totalPatients = 0;
-    Ward* current = department->wardList;
-
-    while (current != NULL) {
-        department->totalPatients += current->occupiedBeds;
-        current = current->next;
-    }
-}
-
-void displayDepartment(const Department* department) {
-    if (department == NULL) return;
-
-    printf("\n============================================================\n");
-    printf("科室: %s (ID: %d)\n", department->departmentName, department->departmentId);
-    printf("统计: %d 名患者 | %d 张床 | %d 个病房\n",
-           department->totalPatients, department->totalBeds, department->totalWards);
-    printf("============================================================\n");
-
-    Ward* current = department->wardList;
-    while (current != NULL) {
-        displayWard(current);
-        current = current->next;
-    }
-}
-
-void freeDepartment(Department* department) {
-    if (department == NULL) return;
-
-    Ward* current = department->wardList;
-    while (current != NULL) {
-        Ward* next = current->next;
-        freeWard(current);
-        current = next;
-    }
-
-    free(department);
-}
-
-// ==================== 统计函数 ====================
 HospitalStatistics collectStatistics(Department* hospital) {
     HospitalStatistics stats;
     memset(&stats, 0, sizeof(stats));
 
-    Department* dept = hospital;
-    int deptIndex = 0;
+    Department* d = hospital;
+    int idx = 0;
 
-    while (dept != NULL && deptIndex < MAX_DEPARTMENTS) {
+    while (d && idx < MAX_DEPARTMENTS) {
         stats.totalDepartments++;
-        stats.totalWards += dept->totalWards;
-        stats.totalBeds += dept->totalBeds;
-        stats.totalPatients += dept->totalPatients;
+        stats.totalWards += d->totalWards;
+        stats.totalBeds += d->totalBeds;
+        stats.totalPatients += d->totalPatients;
 
-        if (dept->totalBeds > 0) {
-            stats.departmentOccupancyRates[deptIndex] =
-                (float)dept->totalPatients / dept->totalBeds * 100;
+        if (d->totalBeds > 0) {
+            stats.departmentOccupancyRates[idx] = (float)d->totalPatients / (float)d->totalBeds * 100.0f;
         }
-        strcpy(stats.departmentNames[deptIndex], dept->departmentName);
-        deptIndex++;
-
-        dept = dept->next;
+        strncpy(stats.departmentNames[idx], d->departmentName, MAX_NAME_LENGTH - 1);
+        stats.departmentNames[idx][MAX_NAME_LENGTH - 1] = '\0';
+        idx++;
+        d = d->next;
     }
 
-    stats.departmentCount = deptIndex;
+    stats.departmentCount = idx;
 
     if (stats.totalBeds > 0) {
-        stats.overallOccupancyRate = (float)stats.totalPatients / stats.totalBeds * 100;
+        stats.overallOccupancyRate = (float)stats.totalPatients / (float)stats.totalBeds * 100.0f;
     }
 
     return stats;
 }
 
 void exportStatisticsToFile(Department* hospital) {
-    if (hospital == NULL) {
+    if (!hospital) {
         printError("医院数据为空，无法生成报告");
         return;
     }
-    
+
     FILE* file = fopen("hospital_report.txt", "w");
-    if (file == NULL) {
+    if (!file) {
         printError("无法创建报告文件");
         return;
     }
-    
+
     HospitalStatistics stats = collectStatistics(hospital);
-    
+
     fprintf(file, "============================================================\n");
     fprintf(file, "医院统计报告（基于真实数据库数据）\n");
     fprintf(file, "============================================================\n\n");
@@ -965,44 +908,34 @@ void exportStatisticsToFile(Department* hospital) {
     fprintf(file, "科室细分\n");
     fprintf(file, "------------------------------------------------------------\n");
     for (int i = 0; i < stats.departmentCount; i++) {
-        fprintf(file, "%s: %.1f%% 占用率\n",
-                stats.departmentNames[i], stats.departmentOccupancyRates[i]);
+        fprintf(file, "%s: %.1f%% 占用率\n", stats.departmentNames[i], stats.departmentOccupancyRates[i]);
     }
 
-    fprintf(file, "\n占用率可视化 (每个 # = 5%%)\n");
-    fprintf(file, "------------------------------------------------------------\n");
-    for (int i = 0; i < stats.departmentCount; i++) {
-        int bars = (int)(stats.departmentOccupancyRates[i] / 5.0f);
-        if (bars > 20) bars = 20;
-        fprintf(file, "%-15s %4.0f%% |", stats.departmentNames[i], stats.departmentOccupancyRates[i]);
-        for (int j = 0; j < bars; j++) fprintf(file, "#");
-        for (int j = bars; j < 20; j++) fprintf(file, " ");
-        fprintf(file, "|\n");
-    }
-    
     fprintf(file, "\n当前住院患者列表\n");
     fprintf(file, "------------------------------------------------------------\n");
-    
-    Department* dept = hospital;
+
     int patientCount = 0;
-    while (dept != NULL) {
-        Ward* ward = dept->wardList;
-        while (ward != NULL) {
-            Bed* bed = ward->bedList;
-            while (bed != NULL) {
+    Department* d = hospital;
+    while (d) {
+        Ward* w = d->wardList;
+        while (w) {
+            Bed* bed = w->bedList;
+            while (bed) {
                 if (bed->status == STATUS_OCCUPIED) {
                     patientCount++;
                     fprintf(file, "%d. %s (ID:%d) - %s -> 病房%d, 床位%d\n",
-                           patientCount, bed->patientName, bed->patientId,
-                           dept->departmentName, ward->wardNumber, bed->bedNumber);
+                            patientCount,
+                            bed->patientName, bed->patientId,
+                            d->departmentName,
+                            w->wardNumber, bed->bedNumber);
                 }
                 bed = bed->next;
             }
-            ward = ward->next;
+            w = w->next;
         }
-        dept = dept->next;
+        d = d->next;
     }
-    
+
     if (patientCount == 0) {
         fprintf(file, "当前无住院患者\n");
     } else {
@@ -1019,51 +952,68 @@ void generateStatisticsReport(Department* hospital, ReportType type) {
     }
 }
 
-// ==================== 患者管理函数 ====================
-void printDepartmentDetails(Department* hospital) {
-    if (hospital == NULL) return;
-
-    printHeader("科室详情");
-
-    Department* dept = hospital;
-    while (dept != NULL) {
-        displayDepartment(dept);
-        dept = dept->next;
+void performDataAnalysis(Department* hospital) {
+    // 保留原逻辑：仍然基于真实内存（由DB加载）数据生成
+    if (!hospital) {
+        printError("医院数据为空！无法进行AI分析。");
+        return;
     }
+
+    time_t now;
+    time(&now);
+
+    FILE* file = fopen(DB_ANALYSIS_FILE, "w");
+    if (!file) {
+        printError("无法创建人工智能分析报告文件");
+        return;
+    }
+
+    fprintf(file, "================================================================================\n");
+    fprintf(file, "                    人工智能辅助数据分析报告\n");
+    fprintf(file, "================================================================================\n");
+    fprintf(file, "报告生成时间: %s", ctime(&now));
+    fprintf(file, "数据源: 真实数据库文件 (departments_db.txt, wards_db.txt, beds_db.txt, patients_db.txt)\n");
+    fprintf(file, "================================================================================\n\n");
+
+    HospitalStatistics stats = collectStatistics(hospital);
+
+    fprintf(file, "医院概览（基于真实数据库）\n");
+    fprintf(file, "------------------------------------------------------------\n");
+    fprintf(file, "科室总数:       %d\n", stats.totalDepartments);
+    fprintf(file, "病房总数:       %d\n", stats.totalWards);
+    fprintf(file, "床位总数:       %d\n", stats.totalBeds);
+    fprintf(file, "患者总数:       %d\n", stats.totalPatients);
+    fprintf(file, "总体占用率:     %.1f%%\n\n", stats.overallOccupancyRate);
+
+    fprintf(file, "科室占用率（基于真实数据库）\n");
+    fprintf(file, "------------------------------------------------------------\n");
+    for (int i = 0; i < stats.departmentCount; i++) {
+        fprintf(file, "%-15s : %.1f%%\n", stats.departmentNames[i], stats.departmentOccupancyRates[i]);
+    }
+
+    fclose(file);
+
+    printSuccess("人工智能分析报告已从真实数据库数据生成！");
+    printf("报告已保存到: %s\n", DB_ANALYSIS_FILE);
 }
 
-void printWardDetails(Department* hospital) {
-    if (hospital == NULL) return;
-
-    printHeader("病房详情");
-
-    Department* dept = hospital;
-    while (dept != NULL) {
-        printf("\n=== 科室: %s ===\n", dept->departmentName);
-        Ward* ward = dept->wardList;
-        while (ward != NULL) {
-            displayWard(ward);
-            ward = ward->next;
-        }
-        dept = dept->next;
-    }
-}
+// ==================== 患者管理 ====================
 
 int admitPatient(Department* hospital, int departmentId, int wardNumber,
                  int bedNumber, int patientId, const char* patientName) {
-    if (hospital == NULL) return FAILURE;
+    if (!hospital) return FAILURE;
 
-    Department* dept = hospital;
-    while (dept != NULL) {
-        if (dept->departmentId == departmentId) {
-            Ward* ward = findWardInDepartment(dept, wardNumber);
-            if (ward == NULL) {
+    Department* d = hospital;
+    while (d) {
+        if (d->departmentId == departmentId) {
+            Ward* w = findWardInDepartment(d, wardNumber);
+            if (!w) {
                 printError("在该科室未找到病房");
                 return FAILURE;
             }
 
-            Bed* bed = findBedInWard(ward, bedNumber);
-            if (bed == NULL) {
+            Bed* bed = findBedInWard(w, bedNumber);
+            if (!bed) {
                 printError("在该病房未找到床位");
                 return FAILURE;
             }
@@ -1074,25 +1024,15 @@ int admitPatient(Department* hospital, int departmentId, int wardNumber,
             }
 
             occupyBed(bed, patientId, patientName);
-            ward->occupiedBeds++;
-            updateDepartmentStats(dept);
+            w->occupiedBeds++;
+            updateDepartmentStats(d);
 
-            printf("\n");
             printSuccess("患者入院成功！");
-            printSeparator();
-            printf("科室: %s\n", dept->departmentName);
-            printf("病房: %d - %s\n", ward->wardNumber, ward->wardName);
-            printf("床位: %d\n", bed->bedNumber);
-            printf("患者: %s (ID: %d)\n", patientName, patientId);
-            printSeparator();
-
-            printf("\n");
             printInfo("正在更新数据库...");
             saveAllDataToDB(hospital);
-
             return SUCCESS;
         }
-        dept = dept->next;
+        d = d->next;
     }
 
     printError("未找到科室");
@@ -1100,50 +1040,45 @@ int admitPatient(Department* hospital, int departmentId, int wardNumber,
 }
 
 int dischargePatient(Department* hospital, int patientId) {
-    if (hospital == NULL) return FAILURE;
+    if (!hospital) return FAILURE;
 
-    Department* dept = hospital;
-    while (dept != NULL) {
-        Ward* ward = dept->wardList;
-        while (ward != NULL) {
-            Bed* bed = ward->bedList;
-            while (bed != NULL) {
+    Department* d = hospital;
+    while (d) {
+        Ward* w = d->wardList;
+        while (w) {
+            Bed* bed = w->bedList;
+            while (bed) {
                 if (bed->status == STATUS_OCCUPIED && bed->patientId == patientId) {
-                    printf("\n");
+                    char confirm;
                     printHeader("找到患者");
                     printf("姓名: %s\n", bed->patientName);
-                    printf("科室: %s\n", dept->departmentName);
-                    printf("病房: %d\n", ward->wardNumber);
+                    printf("科室: %s\n", d->departmentName);
+                    printf("病房: %d\n", w->wardNumber);
                     printf("床位: %d\n", bed->bedNumber);
                     printSeparator();
 
-                    char confirm;
                     printf("\n确认出院？ (y/n): ");
                     scanf(" %c", &confirm);
                     clearInputBuffer();
 
                     if (confirm == 'y' || confirm == 'Y') {
                         vacateBed(bed);
-                        ward->occupiedBeds--;
-                        updateDepartmentStats(dept);
-                        printf("\n");
+                        if (w->occupiedBeds > 0) w->occupiedBeds--;
+                        updateDepartmentStats(d);
                         printSuccess("患者出院成功！");
-
-                        printf("\n");
                         printInfo("正在更新数据库...");
                         saveAllDataToDB(hospital);
-
                         return SUCCESS;
-                    } else {
-                        printInfo("出院已取消");
-                        return FAILURE;
                     }
+
+                    printInfo("出院已取消");
+                    return FAILURE;
                 }
                 bed = bed->next;
             }
-            ward = ward->next;
+            w = w->next;
         }
-        dept = dept->next;
+        d = d->next;
     }
 
     printError("未找到患者 ID");
@@ -1151,56 +1086,56 @@ int dischargePatient(Department* hospital, int patientId) {
 }
 
 int findPatientLocation(Department* hospital, int patientId, PatientInfo* info) {
-    if (hospital == NULL || info == NULL) return FAILURE;
+    if (!hospital || !info) return FAILURE;
 
-    Department* dept = hospital;
-    while (dept != NULL) {
-        Ward* ward = dept->wardList;
-        while (ward != NULL) {
-            Bed* bed = ward->bedList;
-            while (bed != NULL) {
+    Department* d = hospital;
+    while (d) {
+        Ward* w = d->wardList;
+        while (w) {
+            Bed* bed = w->bedList;
+            while (bed) {
                 if (bed->status == STATUS_OCCUPIED && bed->patientId == patientId) {
                     info->patientId = patientId;
-                    strcpy(info->patientName, bed->patientName);
-                    info->departmentId = dept->departmentId;
-                    info->wardNumber = ward->wardNumber;
+                    strncpy(info->patientName, bed->patientName, MAX_NAME_LENGTH - 1);
+                    info->patientName[MAX_NAME_LENGTH - 1] = '\0';
+                    info->departmentId = d->departmentId;
+                    info->wardNumber = w->wardNumber;
                     info->bedNumber = bed->bedNumber;
                     return SUCCESS;
                 }
                 bed = bed->next;
             }
-            ward = ward->next;
+            w = w->next;
         }
-        dept = dept->next;
+        d = d->next;
     }
 
     return FAILURE;
 }
 
 void displayAllPatients(Department* hospital) {
-    if (hospital == NULL) return;
+    if (!hospital) return;
 
     printHeader("当前住院患者列表");
 
     int count = 0;
-    Department* dept = hospital;
-
-    while (dept != NULL) {
-        Ward* ward = dept->wardList;
-        while (ward != NULL) {
-            Bed* bed = ward->bedList;
-            while (bed != NULL) {
+    Department* d = hospital;
+    while (d) {
+        Ward* w = d->wardList;
+        while (w) {
+            Bed* bed = w->bedList;
+            while (bed) {
                 if (bed->status == STATUS_OCCUPIED) {
                     count++;
                     printf("%2d. %-10s (ID:%-6d) %s -> 病房 %d, 床位 %d\n",
                            count, bed->patientName, bed->patientId,
-                           dept->departmentName, ward->wardNumber, bed->bedNumber);
+                           d->departmentName, w->wardNumber, bed->bedNumber);
                 }
                 bed = bed->next;
             }
-            ward = ward->next;
+            w = w->next;
         }
-        dept = dept->next;
+        d = d->next;
     }
 
     if (count == 0) {
@@ -1216,23 +1151,22 @@ void displayAllPatients(Department* hospital) {
 int validateTransfer(Department* hospital, int patientId, int newDepartmentId,
                      int newWardNumber, int newBedNumber, char* errorMessage) {
     PatientInfo info;
-
     if (!findPatientLocation(hospital, patientId, &info)) {
         sprintf(errorMessage, "未找到患者 ID %d", patientId);
         return FAILURE;
     }
 
-    Department* dept = hospital;
-    while (dept != NULL) {
-        if (dept->departmentId == newDepartmentId) {
-            Ward* ward = findWardInDepartment(dept, newWardNumber);
-            if (ward == NULL) {
+    Department* d = hospital;
+    while (d) {
+        if (d->departmentId == newDepartmentId) {
+            Ward* w = findWardInDepartment(d, newWardNumber);
+            if (!w) {
                 sprintf(errorMessage, "未找到病房 %d", newWardNumber);
                 return FAILURE;
             }
 
-            Bed* bed = findBedInWard(ward, newBedNumber);
-            if (bed == NULL) {
+            Bed* bed = findBedInWard(w, newBedNumber);
+            if (!bed) {
                 sprintf(errorMessage, "未找到床位 %d", newBedNumber);
                 return FAILURE;
             }
@@ -1244,7 +1178,7 @@ int validateTransfer(Department* hospital, int patientId, int newDepartmentId,
 
             return SUCCESS;
         }
-        dept = dept->next;
+        d = d->next;
     }
 
     sprintf(errorMessage, "未找到科室 %d", newDepartmentId);
@@ -1263,52 +1197,69 @@ int transferPatient(Department* hospital, int patientId, int newDepartmentId,
     PatientInfo oldInfo;
     findPatientLocation(hospital, patientId, &oldInfo);
 
-    Department* oldDept = hospital;
-    while (oldDept != NULL) {
-        if (oldDept->departmentId == oldInfo.departmentId) {
-            Ward* oldWard = findWardInDepartment(oldDept, oldInfo.wardNumber);
-            Bed* oldBed = findBedInWard(oldWard, oldInfo.bedNumber);
-            vacateBed(oldBed);
-            oldWard->occupiedBeds--;
-            updateDepartmentStats(oldDept);
+    // vacate old
+    Department* d = hospital;
+    while (d) {
+        if (d->departmentId == oldInfo.departmentId) {
+            Ward* w = findWardInDepartment(d, oldInfo.wardNumber);
+            Bed* bed = findBedInWard(w, oldInfo.bedNumber);
+            vacateBed(bed);
+            if (w->occupiedBeds > 0) w->occupiedBeds--;
+            updateDepartmentStats(d);
             break;
         }
-        oldDept = oldDept->next;
+        d = d->next;
     }
 
-    Department* newDept = hospital;
-    while (newDept != NULL) {
-        if (newDept->departmentId == newDepartmentId) {
-            Ward* newWard = findWardInDepartment(newDept, newWardNumber);
-            Bed* newBed = findBedInWard(newWard, newBedNumber);
-            occupyBed(newBed, patientId, oldInfo.patientName);
-            newWard->occupiedBeds++;
-            updateDepartmentStats(newDept);
+    // occupy new
+    d = hospital;
+    while (d) {
+        if (d->departmentId == newDepartmentId) {
+            Ward* w = findWardInDepartment(d, newWardNumber);
+            Bed* bed = findBedInWard(w, newBedNumber);
+            occupyBed(bed, patientId, oldInfo.patientName);
+            w->occupiedBeds++;
+            updateDepartmentStats(d);
             break;
         }
-        newDept = newDept->next;
+        d = d->next;
     }
 
-    printf("\n");
     printSuccess("患者转科成功！");
-    printSeparator();
-    printf("从: %s -> 病房 %d -> 床位 %d\n",
-           oldInfo.patientName, oldInfo.wardNumber, oldInfo.bedNumber);
-    printf("到:   科室 %d -> 病房 %d -> 床位 %d\n",
-           newDepartmentId, newWardNumber, newBedNumber);
-    printSeparator();
-
-    printf("\n");
     printInfo("正在更新数据库...");
     saveAllDataToDB(hospital);
-
     return SUCCESS;
 }
 
-// ==================== 菜单函数 ====================
+void printDepartmentDetails(Department* hospital) {
+    if (!hospital) return;
+    printHeader("科室详情");
+    Department* d = hospital;
+    while (d) {
+        displayDepartment(d);
+        d = d->next;
+    }
+}
+
+void printWardDetails(Department* hospital) {
+    if (!hospital) return;
+    printHeader("病房详情");
+    Department* d = hospital;
+    while (d) {
+        printf("\n=== 科室: %s ===\n", d->departmentName);
+        Ward* w = d->wardList;
+        while (w) {
+            displayWard(w);
+            w = w->next;
+        }
+        d = d->next;
+    }
+}
+
+// ==================== 菜单与输入处理 ====================
+
 void printMainMenu(void) {
-    printf("\n");
-    printf("============================================================\n");
+    printf("\n============================================================\n");
     printf("                医院管理系统\n");
     printf("============================================================\n");
     printf("  1.  收治患者\n");
@@ -1324,347 +1275,12 @@ void printMainMenu(void) {
     printf("============================================================\n");
 }
 
-Department* initializeHospital(void) {
-    printHeader("正在初始化医院系统");
-
-    Department* hospital = createDepartment(1, "心内科");
-    Ward* ward101 = createWard(101, "心内科普通病房", 10);
-    Ward* ward102 = createWard(102, "心内科重症监护室", 5);
-    Ward* ward103 = createWard(103, "心内科私人病房", 5);
-    addWardToDepartment(hospital, ward101);
-    addWardToDepartment(hospital, ward102);
-    addWardToDepartment(hospital, ward103);
-
-    Department* dept2 = createDepartment(2, "外科");
-    Ward* ward201 = createWard(201, "外科普通病房", 10);
-    Ward* ward202 = createWard(202, "外科私人病房", 5);
-    addWardToDepartment(dept2, ward201);
-    addWardToDepartment(dept2, ward202);
-
-    Department* dept3 = createDepartment(3, "儿科");
-    Ward* ward301 = createWard(301, "儿科普通病房", 10);
-    Ward* ward302 = createWard(302, "儿科隔离病房", 5);
-    addWardToDepartment(dept3, ward301);
-    addWardToDepartment(dept3, ward302);
-
-    Department* dept4 = createDepartment(4, "骨科");
-    Ward* ward401 = createWard(401, "骨科普通病房", 10);
-    addWardToDepartment(dept4, ward401);
-
-    Department* dept5 = createDepartment(5, "急诊科");
-    Ward* ward501 = createWard(501, "急诊观察室", 10);
-    addWardToDepartment(dept5, ward501);
-
-    hospital->next = dept2;
-    dept2->next = dept3;
-    dept3->next = dept4;
-    dept4->next = dept5;
-
-    printSuccess("医院系统初始化成功！");
-    printf("  - 5 个科室\n");
-    printf("  - 11 个病房\n");
-    printf("  - 75 张床位\n\n");
-
-    return hospital;
-}
-
-// ==================== 人工智能数据分析 - 基于真实数据库数据 ====================
-void performDataAnalysis(Department* hospital) {
-    time_t now;
-    time(&now);
-    
-    if (hospital == NULL) {
-        printError("医院数据为空！无法进行AI分析。");
-        return;
-    }
-    
-    printf("\n============================================================\n");
-    printf("       人工智能数据分析与预测 - 处理中\n");
-    printf("============================================================\n");
-    printInfo("正在从真实数据库数据生成分析报告...");
-    
-    int totalDepartments = 0;
-    int totalWards = 0;
-    int totalBeds = 0;
-    int totalPatients = 0;
-    
-    Department* dept = hospital;
-    while (dept != NULL) {
-        totalDepartments++;
-        totalWards += dept->totalWards;
-        totalBeds += dept->totalBeds;
-        totalPatients += dept->totalPatients;
-        dept = dept->next;
-    }
-    
-    float overallRate = (totalBeds > 0) ? ((float)totalPatients / totalBeds * 100) : 0;
-    
-    FILE* file = fopen(DB_ANALYSIS_FILE, "w");
-    if (file == NULL) {
-        printError("无法创建人工智能分析报告文件");
-        return;
-    }
-
-    fprintf(file, "================================================================================\n");
-    fprintf(file, "                    人工智能辅助数据分析报告\n");
-    fprintf(file, "================================================================================\n");
-    fprintf(file, "报告生成时间: %s", ctime(&now));
-    fprintf(file, "数据源: 真实数据库文件 (departments_db.txt, wards_db.txt, beds_db.txt, patients_db.txt)\n");
-    fprintf(file, "================================================================================\n\n");
-
-    fprintf(file, "第1节：当前医院状态（基于真实数据库数据）\n");
-    fprintf(file, "--------------------------------------------------------------------------------\n");
-    fprintf(file, "科室总数:       %d\n", totalDepartments);
-    fprintf(file, "病房总数:       %d\n", totalWards);
-    fprintf(file, "床位总数:       %d\n", totalBeds);
-    fprintf(file, "患者总数:       %d\n", totalPatients);
-    fprintf(file, "总体占用率:     %.1f%%\n\n", overallRate);
-
-    fprintf(file, "第2节：按科室分析（基于真实数据库数据）\n");
-    fprintf(file, "--------------------------------------------------------------------------------\n");
-    fprintf(file, "%-15s | %-10s | %-10s | %-12s | %-15s\n",
-            "科室名称", "患者数", "床位数", "占用率", "状态");
-    fprintf(file, "-----------------+------------+------------+--------------+-----------------\n");
-
-    dept = hospital;
-    int criticalCount = 0;
-    int warningCount = 0;
-    float highestOccupancy = 0;
-    char highestDept[50] = "";
-    float lowestOccupancy = 100;
-    char lowestDept[50] = "";
-    int deptDataCount = 0;
-    
-    typedef struct {
-        char name[50];
-        int patients;
-        int beds;
-        float rate;
-    } DeptData;
-    
-    DeptData deptData[MAX_DEPARTMENTS];
-
-    while (dept != NULL && deptDataCount < MAX_DEPARTMENTS) {
-        float rate = dept->totalBeds > 0 ? (float)dept->totalPatients / dept->totalBeds * 100 : 0;
-        
-        strcpy(deptData[deptDataCount].name, dept->departmentName);
-        deptData[deptDataCount].patients = dept->totalPatients;
-        deptData[deptDataCount].beds = dept->totalBeds;
-        deptData[deptDataCount].rate = rate;
-        deptDataCount++;
-        
-        if (rate > highestOccupancy) {
-            highestOccupancy = rate;
-            strcpy(highestDept, dept->departmentName);
-        }
-        if (rate < lowestOccupancy) {
-            lowestOccupancy = rate;
-            strcpy(lowestDept, dept->departmentName);
-        }
-        
-        const char* status;
-        if (rate > 75) {
-            status = "危急";
-            criticalCount++;
-        } else if (rate > 50) {
-            status = "警告";
-            warningCount++;
-        } else {
-            status = "正常";
-        }
-        
-        fprintf(file, "%-15s | %-10d | %-10d | %-11.1f%% | %-15s\n",
-                dept->departmentName, dept->totalPatients, dept->totalBeds, rate, status);
-        
-        dept = dept->next;
-    }
-    fprintf(file, "\n");
-
-    fprintf(file, "第3节：床位利用率可视化（每个 # = 5%% 容量）\n");
-    fprintf(file, "--------------------------------------------------------------------------------\n");
-    
-    for (int i = 0; i < deptDataCount; i++) {
-        int bars = (int)(deptData[i].rate / 5);
-        if (bars > 20) bars = 20;
-        fprintf(file, "%-15s [%3.0f%%] ", deptData[i].name, deptData[i].rate);
-        for (int j = 0; j < bars; j++) fprintf(file, "#");
-        for (int j = bars; j < 20; j++) fprintf(file, ".");
-        fprintf(file, " %d/%d 张床\n", deptData[i].patients, deptData[i].beds);
-    }
-    fprintf(file, "\n");
-
-    fprintf(file, "第4节：人工智能预测引擎（基于真实占用数据）\n");
-    fprintf(file, "--------------------------------------------------------------------------------\n");
-    fprintf(file, "当前总体占用率: %.1f%%\n", overallRate);
-    fprintf(file, "处于危急水平的科室 (>75%%): %d\n", criticalCount);
-    fprintf(file, "处于警告水平的科室 (50-75%%): %d\n", warningCount);
-    fprintf(file, "占用率最高的科室: %s 为 %.1f%%\n", highestDept, highestOccupancy);
-    fprintf(file, "占用率最低的科室: %s 为 %.1f%%\n\n", lowestDept, lowestOccupancy);
-
-    fprintf(file, "未来30天预测:\n");
-    fprintf(file, "----------------------------------------\n");
-
-    for (int i = 0; i < deptDataCount; i++) {
-        float rate = deptData[i].rate;
-        float predictedIncrease = 5.0;
-        int additionalBeds = 0;
-        char recommendation[200] = "密切监控";
-        
-        if (strcmp(deptData[i].name, "心内科") == 0) {
-            predictedIncrease = 18.0;
-            additionalBeds = (int)((rate + predictedIncrease) * deptData[i].beds / 100) - deptData[i].patients;
-            if (additionalBeds < 0) additionalBeds = 0;
-            sprintf(recommendation, "为冬季心血管季节准备 %d 张额外床位", additionalBeds);
-        }
-        else if (strcmp(deptData[i].name, "儿科") == 0) {
-            predictedIncrease = 12.0;
-            additionalBeds = (int)((rate + predictedIncrease) * deptData[i].beds / 100) - deptData[i].patients;
-            if (additionalBeds < 0) additionalBeds = 0;
-            sprintf(recommendation, "储备儿科药品，准备 %d 张额外床位", additionalBeds);
-        }
-        else if (strcmp(deptData[i].name, "急诊科") == 0) {
-            predictedIncrease = 8.0;
-            additionalBeds = (int)((rate + predictedIncrease) * deptData[i].beds / 100) - deptData[i].patients;
-            if (additionalBeds < 0) additionalBeds = 0;
-            sprintf(recommendation, "增加急诊人员，准备 %d 张观察床位", additionalBeds);
-        }
-        else if (strcmp(deptData[i].name, "外科") == 0) {
-            predictedIncrease = 3.0;
-            additionalBeds = (int)((rate + predictedIncrease) * deptData[i].beds / 100) - deptData[i].patients;
-            if (additionalBeds < 0) additionalBeds = 0;
-            sprintf(recommendation, "仔细安排择期手术");
-        }
-        else if (strcmp(deptData[i].name, "骨科") == 0) {
-            predictedIncrease = -5.0;
-            additionalBeds = 0;
-            sprintf(recommendation, "预期减少，考虑资源重新分配");
-        }
-        
-        fprintf(file, "\n%s:\n", deptData[i].name);
-        fprintf(file, "  当前: %.1f%% (%d/%d 张床)\n", rate, deptData[i].patients, deptData[i].beds);
-        fprintf(file, "  预测变化: %+.1f%%\n", predictedIncrease);
-        fprintf(file, "  预期占用率: %.1f%%\n", rate + predictedIncrease);
-        if (additionalBeds > 0) {
-            fprintf(file, "  额外所需床位: %d\n", additionalBeds);
-        }
-        fprintf(file, "  建议: %s\n", recommendation);
-    }
-    fprintf(file, "\n");
-
-    fprintf(file, "第5节：风险评估矩阵\n");
-    fprintf(file, "--------------------------------------------------------------------------------\n");
-
-    for (int i = 0; i < deptDataCount; i++) {
-        float rate = deptData[i].rate;
-        int riskLevel;
-        char riskString[20];
-        
-        if (rate > 85) {
-            riskLevel = 4;
-            strcpy(riskString, "危急");
-        } else if (rate > 70) {
-            riskLevel = 3;
-            strcpy(riskString, "高");
-        } else if (rate > 50) {
-            riskLevel = 2;
-            strcpy(riskString, "中");
-        } else {
-            riskLevel = 1;
-            strcpy(riskString, "低");
-        }
-        
-        fprintf(file, "%-15s | 占用率: %3.0f%% | 风险等级: %s (%d/4)\n",
-                deptData[i].name, rate, riskString, riskLevel);
-    }
-    fprintf(file, "\n");
-
-    fprintf(file, "第6节：建议行动项\n");
-    fprintf(file, "--------------------------------------------------------------------------------\n");
-    
-    if (overallRate > 70) {
-        fprintf(file, "  [!] 全院警报：总体占用率为 %.1f%%\n", overallRate);
-        fprintf(file, "  [!] 立即启动紧急溢出协议\n");
-    } else if (overallRate > 50) {
-        fprintf(file, "  [i] 全院注意：总体占用率为 %.1f%%，请保持警惕\n", overallRate);
-    } else {
-        fprintf(file, "  [✓] 全院状态：总体占用率为 %.1f%%，资源充足\n", overallRate);
-    }
-    
-    if (criticalCount > 0) {
-        fprintf(file, "  [!] %d 个科室处于危急容量\n", criticalCount);
-        fprintf(file, "  [✓] 优先安排这些科室的稳定患者出院\n");
-        fprintf(file, "  [✓] 考虑将非重症患者转移到占用率较低的科室\n");
-    }
-    
-    if (warningCount > 0) {
-        fprintf(file, "  [i] %d 个科室处于警告水平\n", warningCount);
-        fprintf(file, "  [✓] 为这些科室准备备用床位\n");
-    }
-    
-    fprintf(file, "  [✓] 最高优先级: %s 占用率为 %.1f%%\n", highestDept, highestOccupancy);
-    fprintf(file, "  [✓] 可能进行资源重新分配的科室: %s (%.1f%%)\n", lowestDept, lowestOccupancy);
-
-    fprintf(file, "\n第7节：当前住院患者列表（基于真实数据库）\n");
-    fprintf(file, "--------------------------------------------------------------------------------\n");
-    
-    dept = hospital;
-    int patientCount = 0;
-    while (dept != NULL) {
-        Ward* ward = dept->wardList;
-        while (ward != NULL) {
-            Bed* bed = ward->bedList;
-            while (bed != NULL) {
-                if (bed->status == STATUS_OCCUPIED) {
-                    patientCount++;
-                    fprintf(file, "%d. %s (ID:%d) - %s -> 病房%d, 床位%d\n",
-                           patientCount, bed->patientName, bed->patientId,
-                           dept->departmentName, ward->wardNumber, bed->bedNumber);
-                }
-                bed = bed->next;
-            }
-            ward = ward->next;
-        }
-        dept = dept->next;
-    }
-    
-    if (patientCount == 0) {
-        fprintf(file, "当前无住院患者\n");
-    } else {
-        fprintf(file, "\n患者总数: %d\n", patientCount);
-    }
-
-    fprintf(file, "\n第8节：使用的数据库文件\n");
-    fprintf(file, "--------------------------------------------------------------------------------\n");
-    fprintf(file, "本报告中的所有数据均从以下文本文件中读取：\n\n");
-    fprintf(file, "  1. departments_db.txt  - 科室主数据\n");
-    fprintf(file, "  2. wards_db.txt        - 病房主数据及占用信息\n");
-    fprintf(file, "  3. beds_db.txt         - 床位状态及患者分配信息\n");
-    fprintf(file, "  4. patients_db.txt     - 当前住院患者记录\n\n");
-    fprintf(file, "读取的床位总数: %d\n", totalBeds);
-    fprintf(file, "读取的患者总数: %d\n", totalPatients);
-    fprintf(file, "数据时间戳: %s", ctime(&now));
-
-    fprintf(file, "\n================================================================================\n");
-    fprintf(file, "                    人工智能分析报告结束\n");
-    fprintf(file, "================================================================================\n");
-
-    fclose(file);
-
-    printSuccess("人工智能分析报告已从真实数据库数据生成！");
-    printf("报告已保存到: %s\n", DB_ANALYSIS_FILE);
-    printf("\n============================================================\n");
-    printf("  分析完成 - 数据来源于真实数据库文件\n");
-    printf("  报告已保存到 ai_analysis_report.txt\n");
-    printf("============================================================\n");
-}
-
-// ==================== 处理函数 ====================
 void handleAdmitPatient(Department* hospital) {
     printHeader("收治患者");
 
     displayDepartmentList();
 
-    int deptId = getValidatedIntInput("输入科室 ID", 1, 5);
+    int deptId = getValidatedIntInput("输入科室 ID", 1, 999999);
 
     displayWardListForDepartment(deptId);
 
@@ -1673,8 +1289,14 @@ void handleAdmitPatient(Department* hospital) {
     scanf("%d", &wardNum);
     clearInputBuffer();
 
-    int bedNum = getValidatedIntInput("输入床位号", 1, 10);
-    int patientId = getValidatedIntInput("输入患者 ID", 1, 99999);
+    int maxBed = getMaxBedNumberInWard(hospital, deptId, wardNum);
+    if (maxBed <= 0) {
+        printError("无效病房号（该科室下不存在该病房）");
+        return;
+    }
+
+    int bedNum = getValidatedIntInput("输入床位号", 1, maxBed);
+    int patientId = getValidatedIntInput("输入患者 ID", 1, 999999);
 
     char patientName[MAX_NAME_LENGTH];
     printf("输入患者姓名: ");
@@ -1689,8 +1311,8 @@ void handleTransferPatient(Department* hospital) {
 
     displayAllPatients(hospital);
 
-    int patientId = getValidatedIntInput("输入要转科的患者 ID", 1, 99999);
-    int newDeptId = getValidatedIntInput("输入新科室 ID", 1, 5);
+    int patientId = getValidatedIntInput("输入要转科的患者 ID", 1, 999999);
+    int newDeptId = getValidatedIntInput("输入新科室 ID", 1, 999999);
 
     displayWardListForDepartment(newDeptId);
 
@@ -1699,17 +1321,21 @@ void handleTransferPatient(Department* hospital) {
     scanf("%d", &newWardNum);
     clearInputBuffer();
 
-    int newBedNum = getValidatedIntInput("输入新床位号", 1, 10);
+    int maxBed = getMaxBedNumberInWard(hospital, newDeptId, newWardNum);
+    if (maxBed <= 0) {
+        printError("无效病房号（该科室下不存在该病房）");
+        return;
+    }
+
+    int newBedNum = getValidatedIntInput("输入新床位号", 1, maxBed);
 
     transferPatient(hospital, patientId, newDeptId, newWardNum, newBedNum);
 }
 
 void handleDischargePatient(Department* hospital) {
     printHeader("患者出院");
-
     displayAllPatients(hospital);
-
-    int patientId = getValidatedIntInput("输入要出院的患者 ID", 1, 99999);
+    int patientId = getValidatedIntInput("输入要出院的患者 ID", 1, 999999);
     dischargePatient(hospital, patientId);
 }
 
@@ -1717,7 +1343,7 @@ void handleReleaseBed(Department* hospital) {
     printHeader("释放床位");
 
     displayDepartmentList();
-    int deptId = getValidatedIntInput("输入科室 ID", 1, 5);
+    int deptId = getValidatedIntInput("输入科室 ID", 1, 999999);
 
     displayWardListForDepartment(deptId);
 
@@ -1726,84 +1352,101 @@ void handleReleaseBed(Department* hospital) {
     scanf("%d", &wardNum);
     clearInputBuffer();
 
-    int bedNum = getValidatedIntInput("输入床位号", 1, 10);
+    int maxBed = getMaxBedNumberInWard(hospital, deptId, wardNum);
+    if (maxBed <= 0) {
+        printError("无效病房号（该科室下不存在该病房）");
+        return;
+    }
 
-    Department* dept = hospital;
-    while (dept != NULL) {
-        if (dept->departmentId == deptId) {
-            Ward* ward = findWardInDepartment(dept, wardNum);
-            if (ward != NULL) {
-                Bed* bed = findBedInWard(ward, bedNum);
-                if (bed != NULL && bed->status == STATUS_OCCUPIED) {
-                    printf("\n床位 %d - 当前患者: %s (ID: %d)\n",
-                           bedNum, bed->patientName, bed->patientId);
-                    char confirm;
-                    printf("确认释放床位？ (y/n): ");
-                    scanf(" %c", &confirm);
-                    clearInputBuffer();
+    int bedNum = getValidatedIntInput("输入床位号", 1, maxBed);
 
-                    if (confirm == 'y' || confirm == 'Y') {
-                        vacateBed(bed);
-                        ward->occupiedBeds--;
-                        updateDepartmentStats(dept);
-                        printSuccess("床位释放成功！");
-                        saveAllDataToDB(hospital);
-                    }
-                } else if (bed != NULL) {
-                    printInfo("床位已是可用状态");
-                }
+    Department* d = hospital;
+    while (d) {
+        if (d->departmentId == deptId) {
+            Ward* w = findWardInDepartment(d, wardNum);
+            if (!w) return;
+            Bed* bed = findBedInWard(w, bedNum);
+            if (!bed) return;
+
+            if (bed->status != STATUS_OCCUPIED) {
+                printInfo("床位已是可用状态");
+                return;
             }
-            break;
+
+            printf("\n床位 %d - 当前患者: %s (ID: %d)\n", bedNum, bed->patientName, bed->patientId);
+            char confirm;
+            printf("确认释放床位？ (y/n): ");
+            scanf(" %c", &confirm);
+            clearInputBuffer();
+
+            if (confirm == 'y' || confirm == 'Y') {
+                vacateBed(bed);
+                if (w->occupiedBeds > 0) w->occupiedBeds--;
+                updateDepartmentStats(d);
+                printSuccess("床位释放成功！");
+                saveAllDataToDB(hospital);
+            }
+            return;
         }
-        dept = dept->next;
+        d = d->next;
     }
 }
 
-// ==================== 主入口 - 修复的关键部分 ====================
-static Department* g_hospital = NULL;
+// ==================== 初始化（仅用于DB缺失时） ====================
+
+Department* initializeHospital(void) {
+    // 初始化的结构用于“首次创建DB”，不会用于展示时的mock（展示均来自g_hospital内存）
+    // 这里仍保留固定拓扑，但后续所有业务以DB load 的数据为准。
+
+    Department* h = createDepartment(1, "心内科");
+    addWardToDepartment(h, createWard(101, "心内科普通病房", 10));
+    addWardToDepartment(h, createWard(102, "心内科重症监护室", 5));
+    addWardToDepartment(h, createWard(103, "心内科私人病房", 5));
+
+    Department* d2 = createDepartment(2, "外科");
+    addWardToDepartment(d2, createWard(201, "外科普通病房", 10));
+    addWardToDepartment(d2, createWard(202, "外科私人病房", 5));
+
+    Department* d3 = createDepartment(3, "儿科");
+    addWardToDepartment(d3, createWard(301, "儿科普通病房", 10));
+    addWardToDepartment(d3, createWard(302, "儿科隔离病房", 5));
+
+    Department* d4 = createDepartment(4, "骨科");
+    addWardToDepartment(d4, createWard(401, "骨科普通病房", 10));
+
+    Department* d5 = createDepartment(5, "急诊科");
+    addWardToDepartment(d5, createWard(501, "急诊观察室", 10));
+
+    h->next = d2;
+    d2->next = d3;
+    d3->next = d4;
+    d4->next = d5;
+
+    return h;
+}
 
 void init_hospital_globals(void) {
     printf("\n[模块 D] 初始化中...\n");
-    
-    // 首先检查数据库是否有数据
-    int hasData = checkDatabaseIntegrity();
-    
-    if (hasData) {
+
+    if (checkDatabaseIntegrity()) {
         printInfo("找到现有数据库文件，正在加载...");
-        
-        // 加载数据库
         if (loadAllDataFromDB(&g_hospital) == SUCCESS && g_hospital != NULL) {
             printSuccess("数据库加载成功！");
-            
-            // 显示加载的数据摘要
-            int totalDept = 0, totalWard = 0, totalBed = 0, totalPat = 0;
-            Department* dept = g_hospital;
-            while (dept) {
-                totalDept++;
-                totalWard += dept->totalWards;
-                totalBed += dept->totalBeds;
-                totalPat += dept->totalPatients;
-                dept = dept->next;
-            }
-            printf("  已加载: %d 个科室, %d 个病房, %d 张床位, %d 名患者\n", 
-                   totalDept, totalWard, totalBed, totalPat);
             return;
-        } else {
-            printError("数据库文件损坏或格式错误，将创建新数据库...");
         }
+        printError("数据库加载失败，将创建新数据库...");
     } else {
         printInfo("未找到数据库文件，正在创建新数据库...");
     }
-    
-    // 如果没有数据或加载失败，创建新的数据库
+
     g_hospital = initializeHospital();
     saveAllDataToDB(g_hospital);
     printSuccess("新数据库已创建并保存！");
 }
 
-int D_entry(void) {
-    int choice;
+// ==================== 入口/释放 ====================
 
+int D_entry(void) {
     if (g_hospital == NULL) {
         init_hospital_globals();
     }
@@ -1811,22 +1454,22 @@ int D_entry(void) {
     printf("\n[模块 D] 就绪 - 实时数据库模式（文本文件）\n");
     printDatabaseSummary(g_hospital);
 
+    int choice;
     do {
         printMainMenu();
         choice = getValidatedIntInput("选择选项", 0, 10);
 
-        switch(choice) {
-            case 1: handleAdmitPatient(g_hospital);     break;
-            case 2: handleTransferPatient(g_hospital);  break;
+        switch (choice) {
+            case 1: handleAdmitPatient(g_hospital); break;
+            case 2: handleTransferPatient(g_hospital); break;
             case 3: handleDischargePatient(g_hospital); break;
-            case 4: handleReleaseBed(g_hospital);       break;
+            case 4: handleReleaseBed(g_hospital); break;
             case 5: printDepartmentDetails(g_hospital); break;
-            case 6: printWardDetails(g_hospital);       break;
-            case 7: displayAllPatients(g_hospital);     break;
-            case 8: generateStatisticsReport(g_hospital, REPORT_FILE); break;
-            case 9: performDataAnalysis(g_hospital);    break;
+            case 6: printWardDetails(g_hospital); break;
+            case 7: displayAllPatients(g_hospital); break;
+            case 8: generateStatisticsReport(g_hospital, 2 /*REPORT_FILE*/); break;
+            case 9: performDataAnalysis(g_hospital); break;
             case 10:
-                printf("\n");
                 printInfo("正在将数据保存到数据库...");
                 saveAllDataToDB(g_hospital);
                 printSuccess("正在退出系统...");
@@ -1835,21 +1478,20 @@ int D_entry(void) {
                 printf("\n感谢使用医院管理系统！\n");
                 break;
         }
-    } while(choice != 10);
+    } while (choice != 10);
 
     return 0;
 }
 
 void freeHospitalSystem(Department** hospital) {
-    if (hospital == NULL || *hospital == NULL) return;
+    if (!hospital || !*hospital) return;
 
-    Department* current = *hospital;
-    while (current != NULL) {
-        Department* next = current->next;
-        freeDepartment(current);
-        current = next;
+    Department* cur = *hospital;
+    while (cur) {
+        Department* next = cur->next;
+        freeDepartment(cur);
+        cur = next;
     }
-
     *hospital = NULL;
 }
 
@@ -1859,3 +1501,4 @@ void printMemoryReport(void) {
     printSuccess("数据库文件已保存");
     printf("============================================================\n");
 }
+
