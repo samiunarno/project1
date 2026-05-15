@@ -17,6 +17,7 @@
  *   的 medicine_select 功能重复，这里统一保留一个版本供两边共用。
  * - pharmacy(1).c 里的 main 保留为条件编译形式，避免后续并入总工程时
  *   和项目主入口冲突；若要单独演示本文件，可定义 C_MODULE_STANDALONE。
+ * - 修复：clearInputBuffer 改名为 clearInputBuffer_C 避免与 D.o 冲突
  */
 
 typedef struct Registration {
@@ -69,7 +70,7 @@ void prescription_display_by_patient(int patientId);
 void prescription_free_all(void);
 
 /* ===== 来自 pharmacy(1).h 的函数声明 ===== */
-void clearInputBuffer(void);
+void clearInputBuffer_C(void);
 Medicine* medicine_in(Medicine** head, char* name, int price, int stock, int warningLine);
 Medicine* medicine_select(Medicine* head, char* name);
 void medicine_delete(Medicine** head, char* name);
@@ -298,7 +299,8 @@ void prescription_free_all(void)
 
 /* ====================== pharmacy(1).c ====================== */
 
-void clearInputBuffer(void) {
+/* FIXED: Renamed to avoid conflict with D.o */
+void clearInputBuffer_C(void) {
     int ch;
     while ((ch = getchar()) != '\n' && ch != EOF);
 }
@@ -378,12 +380,12 @@ void medicine_stock(Medicine* head) {
     int out;
     printf("---------------- 库存操作 ----------------\n1.入库\n2.出库\n0.返回上一级菜单\n请输入选项：");
     scanf("%d", &num);
-    clearInputBuffer();
+    clearInputBuffer_C();  /* FIXED */
 
     if (num == 1) {
         printf("请输入药品名称：");
         scanf("%s", name);
-        if (strcmp(name, "0") == 0) { clearInputBuffer(); return; }
+        if (strcmp(name, "0") == 0) { clearInputBuffer_C(); return; }  /* FIXED */
         Medicine* p = medicine_select(head, name);
         if (p == NULL) {
             printf("未找到药品！\n");
@@ -392,7 +394,7 @@ void medicine_stock(Medicine* head) {
         printf("请输入入库数量：");
         a:
         while (scanf("%d", &add) != 1) {
-            clearInputBuffer();
+            clearInputBuffer_C();  /* FIXED */
             printf("输入无效，请重新输入：");
         }
         if (add == 0) { return; }
@@ -405,7 +407,7 @@ void medicine_stock(Medicine* head) {
     } else if (num == 2) {
         printf("请输入药品名称：");
         scanf("%s", name);
-        if (strcmp(name, "0") == 0) { clearInputBuffer(); return; }
+        if (strcmp(name, "0") == 0) { clearInputBuffer_C(); return; }  /* FIXED */
         Medicine* p = medicine_select(head, name);
         if (p == NULL) {
             printf("未找到药品！\n");
@@ -414,7 +416,7 @@ void medicine_stock(Medicine* head) {
         printf("请输入出库数量：");
         b:
         while (scanf("%d", &out) != 1) {
-            clearInputBuffer();
+            clearInputBuffer_C();  /* FIXED */
             printf("输入无效，请重新输入：");
         }
         if (out == 0) { return; }
@@ -443,12 +445,12 @@ void medicine_menu(Medicine** head) {
 
     printf("---------------- 药品操作 ----------------\n1.添加药品\n2.删除药品\n3.库存操作\n0.返回\n请输入选项：");
     scanf("%d", &num);
-    clearInputBuffer();
+    clearInputBuffer_C();  /* FIXED */
 
     if (num == 1) {
         printf("药品名称：");
         scanf("%s", name1);
-        if (strcmp(name1, "0") == 0) { clearInputBuffer(); return; }
+        if (strcmp(name1, "0") == 0) { clearInputBuffer_C(); return; }  /* FIXED */
         printf("药品价格：");
         scanf("%d", &price);
         printf("药品库存：");
@@ -460,7 +462,7 @@ void medicine_menu(Medicine** head) {
     } else if (num == 2) {
         printf("请输入药品名称：");
         scanf("%s", name2);
-        if (strcmp(name2, "0") == 0) { clearInputBuffer(); return; }
+        if (strcmp(name2, "0") == 0) { clearInputBuffer_C(); return; }  /* FIXED */
         medicine_delete(head, name2);
     } else if (num == 3) {
         medicine_stock(*head);
@@ -523,7 +525,7 @@ int main() {
         printf("\n===== 主菜单 =====\n");
         printf("1.药品操作\n2.打印药品\n3.保存并退出\n请选择：");
         scanf("%d", &op);
-        clearInputBuffer();
+        clearInputBuffer_C();  /* FIXED */
 
         if (op == 1) {
             medicine_menu(&head);
@@ -540,7 +542,6 @@ int main() {
     return 0;
 }
 #endif
-
 
 static void c_prepare_demo_registration(void) {
     if (c_regHead != NULL) return;
@@ -568,10 +569,10 @@ int C_entry(void) {
         printf("5. 显示全部处方\n");
         printf("0. 返回上一级\n请选择：");
         if (scanf("%d", &op) != 1) {
-            clearInputBuffer();
+            clearInputBuffer_C();  /* FIXED */
             continue;
         }
-        clearInputBuffer();
+        clearInputBuffer_C();  /* FIXED */
 
         if (op == 1) {
             medicine_menu(&head);
@@ -585,20 +586,20 @@ int C_entry(void) {
             while (1) {
                 if (step == 0) {
                     printf("请输入处方编号：");
-                    if (scanf("%d", &presId) != 1) { clearInputBuffer(); continue; }
-                    clearInputBuffer();
+                    if (scanf("%d", &presId) != 1) { clearInputBuffer_C(); continue; }  /* FIXED */
+                    clearInputBuffer_C();  /* FIXED */
                     if (presId == 0) break;
                     step = 1;
                 } else if (step == 1) {
                     printf("请输入药品名称：");
-                    if (scanf("%99s", medName) != 1) { clearInputBuffer(); continue; }
-                    clearInputBuffer();
+                    if (scanf("%99s", medName) != 1) { clearInputBuffer_C(); continue; }  /* FIXED */
+                    clearInputBuffer_C();  /* FIXED */
                     if (strcmp(medName, "0") == 0) { step = 0; continue; }
                     step = 2;
                 } else {
                     printf("请输入药品数量：");
-                    if (scanf("%d", &num) != 1) { clearInputBuffer(); continue; }
-                    clearInputBuffer();
+                    if (scanf("%d", &num) != 1) { clearInputBuffer_C(); continue; }  /* FIXED */
+                    clearInputBuffer_C();  /* FIXED */
                     if (num == 0) { step = 1; continue; }
                     prescription_add_item_by_name(head, presId, medName, num);
                     break;
